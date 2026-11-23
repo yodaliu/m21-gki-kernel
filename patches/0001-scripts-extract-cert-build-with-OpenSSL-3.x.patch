@@ -1,0 +1,28 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: "Claude Opus 5.5" <noreply@anthropic.com>
+Date: Mon, 23 Nov 2026 20:27:29 +0800
+Subject: [PATCH 1/2] scripts: extract-cert: build with OpenSSL 3.x
+
+OpenSSL 3.x no longer declares the ENGINE API used by the PKCS#11 path,
+so the host tool fails to build on current distributions (CentOS Stream 10,
+OpenSSL 3.5). Treat OpenSSL >= 3.0 like BoringSSL and reject pkcs11: URIs.
+Normal builds never take that path.
+---
+ scripts/extract-cert.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/scripts/extract-cert.c b/scripts/extract-cert.c
+index 71b298023..341a4ffe6 100644
+--- a/scripts/extract-cert.c
++++ b/scripts/extract-cert.c
+@@ -121,8 +121,8 @@ int main(int argc, char **argv)
+ 		fclose(f);
+ 		exit(0);
+ 	} else if (!strncmp(cert_src, "pkcs11:", 7)) {
+-#ifdef OPENSSL_IS_BORINGSSL
+-		ERR(1, "BoringSSL does not support extracting from PKCS#11");
++#if defined(OPENSSL_IS_BORINGSSL) || OPENSSL_VERSION_NUMBER >= 0x30000000L
++		ERR(1, "PKCS#11 extraction is not supported with OpenSSL 3.0+ or BoringSSL");
+ 		exit(1);
+ #else
+ 		ENGINE *e;

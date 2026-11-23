@@ -1,0 +1,8 @@
+# Upstream base for the patches in ../patches (sourced by scripts/*.sh).
+UPSTREAM_URL=https://android.googlesource.com/kernel/common
+UPSTREAM_BRANCH=android13-5.15
+UPSTREAM_REF=android13-5.15
+UPSTREAM_COMMIT=3540cf724bf0fe246a3131fd1f3e9342fa03b03e
+UPSTREAM_VERSION=5.15.220
+KMI_GENERATION=8
+LOCALVERSION=-m21

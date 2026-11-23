@@ -1,0 +1,50 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: "Claude Opus 5.5" <noreply@anthropic.com>
+Date: Mon, 23 Nov 2026 20:27:29 +0800
+Subject: [PATCH 2/2] fs: export filp_open/kernel_read/kernel_write without
+ namespace
+
+The FiiO M21 stock kernel (5.15.41-android13-8-gf7d0984aa5e2-dirty) exports
+these symbols without the ANDROID_GKI_VFS_EXPORT_ONLY namespace. Stock vendor
+modules (e.g. hynitron_touch.ko) use them without MODULE_IMPORT_NS() and fail
+to load with -EINVAL on an unmodified ACK kernel. Match the stock behaviour.
+---
+ fs/open.c       | 2 +-
+ fs/read_write.c | 4 ++--
+ 2 files changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/fs/open.c b/fs/open.c
+index 27931d2fc..dc26cfa49 100644
+--- a/fs/open.c
++++ b/fs/open.c
+@@ -1182,7 +1182,7 @@ struct file *filp_open(const char *filename, int flags, umode_t mode)
+ 	}
+ 	return file;
+ }
+-EXPORT_SYMBOL_NS(filp_open, ANDROID_GKI_VFS_EXPORT_ONLY);
++EXPORT_SYMBOL(filp_open);
+ 
+ 
+ /* ANDROID: Allow drivers to open only block files from kernel mode */
+diff --git a/fs/read_write.c b/fs/read_write.c
+index 186187970..da1bb8135 100644
+--- a/fs/read_write.c
++++ b/fs/read_write.c
+@@ -460,7 +460,7 @@ ssize_t kernel_read(struct file *file, void *buf, size_t count, loff_t *pos)
+ 		return ret;
+ 	return __kernel_read(file, buf, count, pos);
+ }
+-EXPORT_SYMBOL_NS(kernel_read, ANDROID_GKI_VFS_EXPORT_ONLY);
++EXPORT_SYMBOL(kernel_read);
+ 
+ ssize_t vfs_read(struct file *file, char __user *buf, size_t count, loff_t *pos)
+ {
+@@ -569,7 +569,7 @@ ssize_t kernel_write(struct file *file, const void *buf, size_t count,
+ 	file_end_write(file);
+ 	return ret;
+ }
+-EXPORT_SYMBOL_NS(kernel_write, ANDROID_GKI_VFS_EXPORT_ONLY);
++EXPORT_SYMBOL(kernel_write);
+ 
+ ssize_t vfs_write(struct file *file, const char __user *buf, size_t count, loff_t *pos)
+ {
