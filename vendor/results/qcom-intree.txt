@@ -1,0 +1,219 @@
+altmode_glink               IDENTICAL  
+arm_smmu                    IDENTICAL  
+bam_dma                     IDENTICAL  
+bcl_pmic5                   IDENTICAL  
+bcl_soc                     IDENTICAL  
+boot_stats                  IDENTICAL  
+bwmon                       IDENTICAL  
+cdsp_loader                 IDENTICAL  
+cdsprm                      IDENTICAL  
+cfg80211                    IDENTICAL  
+charger_ulog_glink          IDENTICAL  
+clk_dummy                   IDENTICAL  
+clk_qcom                    IDENTICAL  
+clk_rpm                     IDENTICAL  
+clk_smd_rpm                 IDENTICAL  
+core_hang_detect            IDENTICAL  
+coresight                   IDENTICAL  
+coresight_csr               IDENTICAL  
+coresight_cti               IDENTICAL  
+coresight_dummy             IDENTICAL  
+coresight_funnel            IDENTICAL  
+coresight_hwevent           IDENTICAL  
+coresight_remote_etm        IDENTICAL  
+coresight_replicator        IDENTICAL  
+coresight_stm               IDENTICAL  
+coresight_tgu               IDENTICAL  
+coresight_tmc               IDENTICAL  
+coresight_tpda              IDENTICAL  
+coresight_tpdm              IDENTICAL  
+cpu_hotplug                 IDENTICAL  
+cpufreq_ondemand            IDENTICAL  
+cpufreq_userspace           IDENTICAL  
+cqhci                       IDENTICAL  
+crypto_qti_common           IDENTICAL  
+crypto_qti_tz               IDENTICAL  
+cx_ipeak                    IDENTICAL  
+cx_ipeak_cdev               IDENTICAL  
+dcc_v2                      IDENTICAL  
+debug_regulator             IDENTICAL  
+debugcc_khaje               IDENTICAL  
+dispcc_khaje                IDENTICAL  
+dwc3_msm                    CLOSE      funcs 112/117 same-size, exports =, imports -0/+0, strings -2/+0
+ehset                       IDENTICAL  
+eud                         IDENTICAL  
+f_fs_ipc_log                IDENTICAL  
+fpga_mgr                    IDENTICAL  
+frpc_adsprpc                CLOSE      funcs 192/195 same-size, exports =, imports -0/+0, strings -0/+0
+fsa4480_i2c                 IDENTICAL  
+gcc_khaje                   DIFFERENT  funcs 4/4 same-size, exports =, imports -1/+0, strings -0/+0
+gdsc_regulator              IDENTICAL  
+glink_pkt                   IDENTICAL  
+glink_probe                 IDENTICAL  
+gpucc_khaje                 IDENTICAL  
+guestvm_loader              IDENTICAL  
+heap_mem_ext_v01            IDENTICAL  
+hung_task_enh               IDENTICAL  
+i2c_msm_geni                DIFFERENT  funcs 30/36 same-size, exports =, imports -0/+0, strings -7/+1
+icc_debug                   IDENTICAL  
+icc_rpm                     IDENTICAL  
+icc_test                    IDENTICAL  
+iommu_logger                IDENTICAL  
+ipa_fmwk                    IDENTICAL  
+leds_aw2016                 IDENTICAL  
+leds_qpnp_vibrator_ldo      IDENTICAL  
+leds_qti_flash              IDENTICAL  
+leds_qti_tri_led            IDENTICAL  
+lmh_cpu_vdd_cdev            IDENTICAL  
+mdt_loader                  IDENTICAL  
+mem_buf                     IDENTICAL  
+mem_buf_dev                 IDENTICAL  
+mem_offline                 CLOSE      funcs 22/23 same-size, exports =, imports -0/+0, strings -0/+0
+memlat                      CLOSE      funcs 52/53 same-size, exports =, imports -0/+0, strings -0/+0
+memory_dump_v2              IDENTICAL  
+minidump                    IDENTICAL  
+msm_dma_iommu_mapping       IDENTICAL  
+msm_geni_serial             DIFFERENT  funcs 65/71 same-size, exports =, imports -1/+0, strings -1/+0
+msm_gpi                     DIFFERENT  funcs 33/35 same-size, exports =, imports -0/+0, strings -4/+0
+msm_lmh_dcvs                IDENTICAL  
+msm_memshare                IDENTICAL  
+msm_performance             IDENTICAL  
+msm_poweroff                IDENTICAL  
+msm_qmp                     IDENTICAL  
+msm_sharedmem               IDENTICAL  
+msm_sysstats                IDENTICAL  
+msm_tsens_driver            IDENTICAL  
+ns                          IDENTICAL  
+nvmem_qcom_spmi_sdam        IDENTICAL  
+nvmem_qfprom                IDENTICAL  
+panel_event_notifier        IDENTICAL  
+pdr_interface               IDENTICAL  
+phy_generic                 IDENTICAL  
+phy_msm_snps_hs             DIFFERENT  funcs 15/22 same-size, exports =, imports -5/+0, strings -8/+0
+phy_msm_ssusb_qmp           IDENTICAL  
+phy_qcom_emu                IDENTICAL  
+phy_qcom_ufs                IDENTICAL  
+phy_qcom_ufs_qmp_v4         IDENTICAL  
+phy_qcom_ufs_qmp_v4_kalama  IDENTICAL  
+phy_qcom_ufs_qmp_v4_khaje   IDENTICAL  
+phy_qcom_ufs_qmp_v4_waipio  IDENTICAL  
+phy_qcom_ufs_qrbtc_sdm845   IDENTICAL  
+phy_xgene                   IDENTICAL  
+pinctrl_bengal              IDENTICAL  
+pinctrl_khaje               IDENTICAL  
+pinctrl_msm                 IDENTICAL  
+pinctrl_spmi_gpio           DIFFERENT  funcs 25/26 same-size, exports =, imports -1/+0, strings -0/+0
+pinctrl_spmi_mpp            IDENTICAL  
+pm8941_pwrkey               IDENTICAL  
+pmic_glink                  IDENTICAL  
+proxy_consumer              IDENTICAL  
+pwm_qti_lpg                 IDENTICAL  
+qcom_aoss                   IDENTICAL  
+qcom_apcs_ipc_mailbox       IDENTICAL  
+qcom_cpu_vendor_hooks       IDENTICAL  
+qcom_cpufreq_hw             DIFFERENT  funcs 28/29 same-size, exports =, imports -1/+0, strings -0/+0
+qcom_cpufreq_hw_debug       IDENTICAL  
+qcom_dcvs                   IDENTICAL  
+qcom_dma_heaps              IDENTICAL  
+qcom_glink                  IDENTICAL  
+qcom_glink_rpm              IDENTICAL  
+qcom_glink_smem             IDENTICAL  
+qcom_glink_spss             IDENTICAL  
+qcom_hwspinlock             IDENTICAL  
+qcom_i2c_pmic               IDENTICAL  
+qcom_iommu_debug            IDENTICAL  
+qcom_iommu_util             IDENTICAL  
+qcom_ipc_logging            IDENTICAL  
+qcom_logbuf_vh              IDENTICAL  
+qcom_lpm                    IDENTICAL  
+qcom_mpm                    IDENTICAL  
+qcom_pil_info               IDENTICAL  
+qcom_pm8008_regulator       IDENTICAL  
+qcom_pmu_lib                IDENTICAL  
+qcom_pon                    IDENTICAL  
+qcom_q6v5                   IDENTICAL  
+qcom_q6v5_pas               CLOSE      funcs 28/29 same-size, exports =, imports -0/+0, strings -0/+0
+qcom_qpnp_qg                IDENTICAL  
+qcom_ramdump                IDENTICAL  
+qcom_rpm                    IDENTICAL  
+qcom_scm                    IDENTICAL  
+qcom_smb1355_charger        IDENTICAL  
+qcom_smb1398_charger        IDENTICAL  
+qcom_smd                    IDENTICAL  
+qcom_soc_wdt                IDENTICAL  
+qcom_spmi_adc5              CLOSE      funcs 15/15 same-size, exports =, imports -0/+0, strings -2/+0
+qcom_spmi_adc_tm5           IDENTICAL  
+qcom_spmi_pmic              DIFFERENT  funcs 3/4 same-size, exports =, imports -0/+0, strings -0/+0
+qcom_spmi_temp_alarm        IDENTICAL  
+qcom_spss                   IDENTICAL  
+qcom_sysmon                 CLOSE      funcs 21/22 same-size, exports =, imports -0/+0, strings -2/+0
+qcom_tsens                  CLOSE      funcs 38/39 same-size, exports =, imports -0/+0, strings -0/+0
+qcom_va_minidump            IDENTICAL  
+qcom_vadc_common            IDENTICAL  
+qcom_wdt_core               IDENTICAL  
+qfprom_sys                  IDENTICAL  
+qmi_helpers                 IDENTICAL  
+qnoc_bengal                 IDENTICAL  
+qnoc_qos_rpm                IDENTICAL  
+qpnp_pdphy                  IDENTICAL  
+qpnp_power_on               CLOSE      funcs 44/45 same-size, exports =, imports -0/+0, strings -1/+0
+qpnp_smb5_main              IDENTICAL  
+qrtr                        IDENTICAL  
+qrtr_smd                    IDENTICAL  
+qti_battery_charger         CLOSE      funcs 51/52 same-size, exports =, imports -0/+0, strings -0/+0
+qti_battery_debug           IDENTICAL  
+qti_cpufreq_cdev            IDENTICAL  
+qti_devfreq_cdev            IDENTICAL  
+qti_qmi_cdev                IDENTICAL  
+qti_qmi_sensor              IDENTICAL  
+qti_regmap_debugfs          IDENTICAL  
+qti_userspace_cdev          IDENTICAL  
+rdbg                        IDENTICAL  
+reboot_mode                 IDENTICAL  
+refgen                      IDENTICAL  
+regmap_spmi                 IDENTICAL  
+regulator_cdev              IDENTICAL  
+rpm_master_stat             IDENTICAL  
+rpm_smd                     IDENTICAL  
+rpm_smd_cooling_device      IDENTICAL  
+rpm_smd_debug               IDENTICAL  
+rpm_smd_regulator           IDENTICAL  
+rproc_qcom_common           IDENTICAL  
+rq_stats                    IDENTICAL  
+rtc_pm8xxx                  DIFFERENT  funcs 15/16 same-size, exports =, imports -0/+0, strings -1/+1
+sched_walt                  CLOSE      funcs 465/472 same-size, exports =, imports -0/+0, strings -3/+0
+sdhci_msm                   DIFFERENT  funcs 86/90 same-size, exports =, imports -2/+0, strings -2/+0
+secure_buffer               IDENTICAL  
+sg                          IDENTICAL  
+slim_qcom_ngd_ctrl          CLOSE      funcs 42/44 same-size, exports =, imports -0/+0, strings -2/+0
+slimbus                     DIFFERENT  funcs 37/39 same-size, exports !=, imports -0/+0, strings -1/+1
+smem                        IDENTICAL  
+smp2p                       IDENTICAL  
+smp2p_sleepstate            IDENTICAL  
+snd_usb_audio_qmi           DIFFERENT  funcs 35/38 same-size, exports =, imports -1/+0, strings -0/+0
+soc_sleep_stats             IDENTICAL  
+socinfo                     DIFFERENT  funcs 65/72 same-size, exports =, imports -3/+0, strings -8/+0
+spi_msm_geni                CLOSE      funcs 38/40 same-size, exports =, imports -0/+0, strings -3/+1
+spmi_glink_debug            IDENTICAL  
+spmi_pmic_arb               IDENTICAL  
+sps_drv                     IDENTICAL  
+stm_console                 IDENTICAL  
+stm_core                    IDENTICAL  
+stm_ftrace                  IDENTICAL  
+stm_p_basic                 IDENTICAL  
+stm_p_ost                   IDENTICAL  
+stub_regulator              IDENTICAL  
+thermal_pause               IDENTICAL  
+ucsi_glink                  IDENTICAL  
+ufs_qcom                    IDENTICAL  
+ufshcd_crypto_qti           IDENTICAL  
+usb_bam                     IDENTICAL  
+usb_f_ccid                  IDENTICAL  
+usb_f_cdev                  IDENTICAL  
+usb_f_diag                  IDENTICAL  
+usb_f_gsi                   IDENTICAL  
+usb_f_qdss                  IDENTICAL  
+usbpd                       IDENTICAL  
+zram                        IDENTICAL  
+zsmalloc                    IDENTICAL  
+SUMMARY: CLOSE=13, DIFFERENT=13, IDENTICAL=192, total=218

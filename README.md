@@ -18,6 +18,7 @@ A custom kernel for the FiiO M21 (Snapdragon 680 / SM6225, FW 1.1.0, Android 13)
 | `scripts/verify-all-modules.py` | 離線驗證全部原廠模組的相容性（CRC、未解析、重複導出、命名空間、載入順序） |
 | `scripts/test_verify_all_modules.py` | `verify-all-modules.py` 的單元測試（`cd scripts && python3 -m unittest test_verify_all_modules`，共 94 項） |
 | `scripts/update-upstream.sh` | 把補丁搬到新的上游 tag 或 commit 上，並更新 `UPSTREAM`、`patches/` 和 config |
+| `vendor/`、`scripts/{fetch,build,compare}-vendor-*` | 從 CodeLinaro 公開原始碼重建 Qualcomm 的 vendor 模組（msm-kernel 樹內 + techpack），並和原廠比對：275 個中有 234 個完全相同（見 [vendor/README.md](vendor/README.md)） |
 
 ## 需求
 

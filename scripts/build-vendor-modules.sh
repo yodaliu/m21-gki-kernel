@@ -1,0 +1,126 @@
+#!/bin/bash
+# Rebuild the stock Qualcomm vendor modules of FiiO M21 FW 1.1.0 from public sources.
+#   1. msm-kernel with gki_defconfig + vendor/bengal_GKI.config + vendor/bengal-m21.config  -> in-tree modules
+#   2. each techpack as an external module against that build                                -> techpack modules
+# Sources come from scripts/fetch-vendor-sources.sh.  Output: $VOUT/kernel (in-tree) and $VDIST (all .ko).
+# The rebuilt modules are for reference and comparison (scripts/compare-vendor-modules.py); the M21 kernel
+# itself does not need them.  Usage: build-vendor-modules.sh [kernel|techpacks|all]   (default all)
+set -eu
+HERE=$(cd "$(dirname "$0")/.." && pwd)
+VWORK=${VWORK:-$HOME/m21-vendor}
+VOUT=${VOUT:-$VWORK/out}
+VDIST=${VDIST:-$VWORK/dist}
+CLANG=${CLANG:-$HOME/toolchains/clang-r450784e}
+JOBS=${JOBS:-$(nproc)}
+SRC=$VWORK/kernel_platform/msm-kernel
+V=$VWORK/vendor/qcom/opensource
+LOG=$VOUT/logs
+STAGE=${1:-all}
+
+[ -d "$SRC" ] || { echo "missing $SRC: run scripts/fetch-vendor-sources.sh first" >&2; exit 1; }
+"$CLANG/bin/clang" --version | grep -q 'r450784e' || { echo "need clang r450784e at $CLANG" >&2; exit 1; }
+export PATH=$CLANG/bin:$PATH
+mkdir -p "$VOUT/kernel" "$LOG" "$VDIST"
+# pahole >= 1.22 emits BTF kinds (enum64, decl/type tags) that 5.15.41's resolve_btfids/libbpf cannot load
+# ("load BTF from vmlinux: Invalid argument"); 5.15.41 passes no flags to turn them off, so wrap pahole.
+PAHOLE_W=$VOUT/pahole-5.15
+cat > "$PAHOLE_W" <<'EOF'
+#!/bin/sh
+[ "$1" = --version ] && exec pahole --version
+exec pahole --skip_encoding_btf_enum64 --skip_encoding_btf_decl_tag --skip_encoding_btf_type_tag "$@"
+EOF
+chmod +x "$PAHOLE_W"
+# KCFLAGS as in msm-kernel build.config.common (qcacld keys its cfg80211 MLO API on it)
+K=(make -C "$SRC" O="$VOUT/kernel" ARCH=arm64 LLVM=1 LLVM_IAS=1 -j"$JOBS" KCFLAGS=-D__ANDROID_COMMON_KERNEL__
+   PAHOLE="$PAHOLE_W")
+
+build_kernel() {
+  # extract-cert only: lets the host tool build with OpenSSL 3 (same patch as the M21 kernel)
+  # (msm-kernel's extract-cert.c is 7 lines off ACK 5.15.220, hence patch(1) with fuzz, not git apply)
+  local p=$(ls "$HERE"/patches/0001-*.patch)
+  if ! patch -d "$SRC" -p1 -R -F3 --dry-run -s < "$p" >/dev/null 2>&1; then
+    patch -d "$SRC" -p1 -F3 -N -s < "$p"
+  fi
+  "${K[@]}" gki_defconfig > "$LOG/kernel-config.log"
+  (cd "$SRC" && scripts/kconfig/merge_config.sh -m -O "$VOUT/kernel" "$VOUT/kernel/.config" \
+      arch/arm64/configs/vendor/bengal_GKI.config "$HERE/vendor/bengal-m21.config" >> "$LOG/kernel-config.log")
+  "${K[@]}" olddefconfig >> "$LOG/kernel-config.log"
+  echo "kernel: building in-tree modules (log: $LOG/kernel.log)"
+  "${K[@]}" modules > "$LOG/kernel.log" 2>&1 || { tail -20 "$LOG/kernel.log"; exit 1; }
+  echo "kernel: $(find "$VOUT/kernel" -name '*.ko' | wc -l) modules"
+}
+
+# GNU make >= 4.3 reads tab-indented lines after a rule as recipe lines; several techpack Kbuild files
+# indent 'include'/assignments with tabs inside ifeq blocks.  Re-indent with spaces (no code change).
+# Kbuild files that define rules keep their tab-indented recipe lines; only directives are re-indented there.
+# A bare 'export' (export every variable) makes make >= 4.4 expand kbuild's rule macros into each recipe's
+# environment (error "prerequisites cannot be defined in recipes" and near-endless runs); every audio
+# sub-Kbuild includes its own config/*.conf, so the bare exports are dropped.
+untab() {
+  local f
+  while IFS= read -r -d '' f; do
+    sed -i -E '/^[[:space:]]*export[[:space:]]*$/d' "$f"
+    if grep -qE '^[^[:space:]#][^=]*[^:=]:([^=]|$)' "$f"; then
+      sed -i -E 's/^\t+((include|ifeq|ifneq|ifdef|ifndef|else|endif|export|[A-Za-z_][A-Za-z0-9_-]*[[:space:]]*[:+?]?=))/    \1/' "$f"
+    else
+      sed -i -E 's/^\t+/    /' "$f"
+    fi
+  done < <(find "$1" -name Kbuild -print0)
+}
+
+tp() {  # tp <name> <dir> [kbuild args...]
+  local n=$1 d=$2; shift 2
+  untab "$d"
+  if "${K[@]}" M="$d" KERNEL_SRC="$SRC" modules "$@" > "$LOG/$n.log" 2>&1; then
+    echo "ok     $n: $(find "$d" -name '*.ko' | wc -l) modules"
+  else
+    echo "FAIL   $n (log: $LOG/$n.log)"; grep -m3 -E 'error:|No rule' "$LOG/$n.log" | sed 's/^/         /'
+  fi
+}
+sym() { echo "$V/$1/Module.symvers"; }
+
+build_techpacks() {
+  [ -f "$VOUT/kernel/Module.symvers" ] || { echo "build the kernel stage first" >&2; exit 1; }
+  # mmrm_test_module's source (test/) is not public; build the driver only
+  [ -f "$V/mmrm-driver/test/Kbuild" ] || { mkdir -p "$V/mmrm-driver/test"; : > "$V/mmrm-driver/test/Kbuild"; }
+  tp securemsm "$V/securemsm-kernel" SSG_MODULE_ROOT="$V/securemsm-kernel" BOARD_PLATFORM=bengal
+  tp mmrm "$V/mmrm-driver" MMRM_ROOT="$V/mmrm-driver" BOARD_PLATFORM=bengal
+  # khaje WLAN platform (WCN3990 over SNOC); qcacld picks its bus (CONFIG_ROME_IF=snoc) from the same options
+  local wp=(CONFIG_CNSS_OUT_OF_TREE=y CONFIG_ICNSS2=m CONFIG_ICNSS2_QMI=y CONFIG_CNSS_GENL=m
+            CONFIG_WCNSS_MEM_PRE_ALLOC=m CONFIG_CNSS_UTILS=m CONFIG_CNSS_QMI_SVC=m)
+  tp wlan-platform "$V/wlan/platform" WLAN_PLATFORM_ROOT="$V/wlan/platform" "${wp[@]}" \
+     KBUILD_EXTRA_SYMBOLS="$(sym securemsm-kernel)"
+  # qca_cld3_wlan.ko (Android renames wlan.ko); khaje pairs with WCN3990 = profile "adrastea"
+  tp wlan "$V/wlan/qcacld-3.0" WLAN_ROOT="$V/wlan/qcacld-3.0" WLAN_COMMON_ROOT=cmn \
+     WLAN_COMMON_INC="$V/wlan/qcacld-3.0/cmn" WLAN_FW_API="$V/wlan/fw-api" WLAN_PLATFORM_INC="$V/wlan/platform/inc" \
+     WLAN_PROFILE=adrastea MODNAME=wlan DEVNAME=wlan CONFIG_QCA_CLD_WLAN=m BOARD_PLATFORM=bengal "${wp[@]}" \
+     KBUILD_EXTRA_SYMBOLS="$(sym wlan/platform)"
+  tp bt "$V/bt-kernel" BT_ROOT="$V/bt-kernel" CONFIG_MSM_BT_POWER=m CONFIG_BTFM_SLIM=m CONFIG_I2C_RTC6226_QCA=m \
+     KBUILD_EXTRA_SYMBOLS="$(sym wlan/platform)"
+  tp audio "$V/audio-kernel" AUDIO_ROOT="$V/audio-kernel" MODNAME=audio
+  tp kgsl "$V/graphics-kernel" KGSL_PATH="$V/graphics-kernel" MODNAME=msm_kgsl BOARD_PLATFORM=bengal
+  tp display "$V/display-drivers/msm" DISPLAY_ROOT="$V/display-drivers" MODNAME=msm_drm BOARD_PLATFORM=bengal \
+     KBUILD_EXTRA_SYMBOLS="$(sym mmrm-driver) $(sym securemsm-kernel)"
+  tp video "$V/video-driver" VIDEO_ROOT="$V/video-driver" MODNAME=msm_video BOARD_PLATFORM=bengal \
+     KBUILD_EXTRA_SYMBOLS="$(sym mmrm-driver)"
+  tp camera "$V/camera-kernel" CAMERA_KERNEL_ROOT="$V/camera-kernel" KERNEL_ROOT="$SRC" MODNAME=camera BOARD_PLATFORM=bengal
+  tp dataipa "$V/dataipa" KBUILD_EXTRA_SYMBOLS="$(sym securemsm-kernel)"
+  tp rmnet-core "$V/datarmnet/core" KBUILD_EXTRA_SYMBOLS="$(sym dataipa)"
+  tp rmnet-wlan "$V/datarmnet-ext/wlan" RMNET_CORE_PATH="$V/datarmnet/core" RMNET_CORE_INC_DIR="$V/datarmnet/core" \
+     KBUILD_EXTRA_SYMBOLS="$(sym datarmnet/core)"
+  tp nfc "$VWORK/vendor/nxp/opensource/driver" NFC_ROOT="$VWORK/vendor/nxp/opensource/driver" CONFIG_NXP_NFC_I2C=m \
+     KBUILD_EXTRA_SYMBOLS="$(sym securemsm-kernel)"
+}
+
+case $STAGE in
+  kernel) build_kernel ;;
+  techpacks) build_techpacks ;;
+  all) build_kernel; build_techpacks ;;
+  *) echo "usage: $0 [kernel|techpacks|all]" >&2; exit 2 ;;
+esac
+
+rm -rf "$VDIST"; mkdir -p "$VDIST"
+find "$VOUT/kernel" "$V" "$VWORK/vendor/nxp" -name '*.ko' -exec cp {} "$VDIST/" \;
+# file names as shipped on the device
+[ -f "$VDIST/wlan.ko" ] && mv "$VDIST/wlan.ko" "$VDIST/qca_cld3_wlan.ko"
+echo "dist: $(ls "$VDIST" | wc -l) modules in $VDIST"

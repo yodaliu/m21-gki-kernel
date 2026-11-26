@@ -18,6 +18,7 @@ The kernel can directly replace the stock boot partition. For complete build ins
 | `scripts/verify-all-modules.py` | Verifies compatibility of all stock modules offline (CRCs, unresolved symbols, duplicate exports, namespaces, and load order) |
 | `scripts/test_verify_all_modules.py` | Unit tests for `verify-all-modules.py` (`cd scripts && python3 -m unittest test_verify_all_modules`, 94 tests) |
 | `scripts/update-upstream.sh` | Rebases the patches onto a new upstream tag or commit and updates `UPSTREAM`, `patches/`, and the config |
+| `vendor/`, `scripts/{fetch,build,compare}-vendor-*` | Rebuilds the Qualcomm vendor modules (msm-kernel in-tree + techpacks) from public CodeLinaro sources and compares them with stock: 234 of 275 are identical (see [vendor/README_EN.md](vendor/README_EN.md)) |
 
 ## Requirements
 

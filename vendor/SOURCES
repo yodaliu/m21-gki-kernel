@@ -1,0 +1,31 @@
+# Public Qualcomm sources matching the stock FW 1.1.0 vendor modules.
+# Fields: <checkout path, relative to $VWORK>|<CodeLinaro project under https://git.codelinaro.org/clo/la/>|<commit>
+#
+# msm-kernel: tag KERNEL.PLATFORM.2.0.r1-08500-kernel.0 (5.15.41, 2023-01-30).  Stock vermagic is
+#   5.15.41-gf7d0984aa5e2-dirty; f7d0984aa5e2 is not public (FiiO/Quectel BSP commit), the public base was
+#   identified from the stock debugcc-khaje.ko (clock-mux registration order changed in 08500).
+# techpacks: revisions from manifest AU_LINUX_ANDROID_LA.VENDOR.13.2.0.R1.11.00.00.925.127 (the last public
+#   LA.VENDOR.13.2.0 release on a 5.15.41 msm-kernel); projects not in that manifest use the newest commit
+#   before 2023-02-01 on the LA.VENDOR.13.2.1 r1-family branch (noted per line).
+kernel_platform/msm-kernel|kernel/msm-5.15|e4ae393050a4845f57e234c043186fd08811f682
+vendor/qcom/opensource/securemsm-kernel|platform/vendor/qcom/opensource/securemsm-kernel|bc802aa24b485e5e47524c40ad2ec16e959831d0
+vendor/qcom/opensource/mmrm-driver|platform/vendor/opensource/mmrm-driver|0bdd7546c54135613e927f547a69f342bb646c11
+vendor/qcom/opensource/wlan/platform|platform/vendor/qcom-opensource/wlan/platform|16df511d10fc435f27531a398e180dcbf5b2628b
+vendor/qcom/opensource/wlan/fw-api|platform/vendor/qcom-opensource/wlan/fw-api|23dfbf5ce6b6c8904b775ea5c9f464a094684b97
+vendor/qcom/opensource/wlan/qca-wifi-host-cmn|platform/vendor/qcom-opensource/wlan/qca-wifi-host-cmn|fc307e86c9ebfeb85a353d7181506655f223ff32
+vendor/qcom/opensource/wlan/qcacld-3.0|platform/vendor/qcom-opensource/wlan/qcacld-3.0|6baa3ad50c0e7aeb7cb7dde441b7ec5083081c41
+vendor/qcom/opensource/bt-kernel|platform/vendor/qcom-opensource/bt-kernel|865cbd58075f8809af6328f4aa5e5b55967c4671
+vendor/qcom/opensource/dataipa|platform/vendor/opensource/dataipa|36ac7909d193349661d77e5a5d6ec8ee0dca9e86
+vendor/qcom/opensource/datarmnet|platform/vendor/qcom/opensource/datarmnet|b8b9ddaab559bd509d1bb708f43b9df10be9e638
+vendor/qcom/opensource/datarmnet-ext|platform/vendor/qcom/opensource/datarmnet-ext|d230098eb0e1b9ad1d1fe5df335b8e67a5f941d5
+vendor/nxp/opensource/driver|platform/vendor/nxp/opensource/driver|d0e4c8d63117d3fc96d18c4003e76fbc29b31dec
+# branch audio-kernel.lnx.5.15.r4-rel
+vendor/qcom/opensource/audio-kernel|platform/vendor/qcom/opensource/audio-kernel-ar|2b70d8013d46242f8dbea5c5d02e0c0407e362c8
+# branch gfx-kernel.lnx.13.0.r5-rel
+vendor/qcom/opensource/graphics-kernel|platform/vendor/qcom/opensource/graphics-kernel|3b810e33e3f965c121d9b96c8a9845a74de2b535
+# branch display-kernel.lnx.5.15.2.r1-rel
+vendor/qcom/opensource/display-drivers|platform/vendor/opensource/display-drivers|b14f93d949a519def5e4b0b385019bd88ac7891b
+# branch camera-kernel.lnx.3.2.r1-rel
+vendor/qcom/opensource/camera-kernel|platform/vendor/opensource/camera-kernel|801a9eb9705118d295fb084ccc898dc31547106e
+# branch video-kernel-waipio.lnx.1.0.r4-rel
+vendor/qcom/opensource/video-driver|platform/vendor/opensource/video-driver|b990b02cca753bab2e672732d12728462cdbcedb
