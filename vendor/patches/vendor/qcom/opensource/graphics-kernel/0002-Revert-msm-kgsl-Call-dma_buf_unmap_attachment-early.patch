@@ -1,0 +1,50 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Pankaj Gupta <quic_gpankaj@quicinc.com>
+Date: Wed, 11 Jan 2023 18:48:36 +0530
+Subject: [PATCH 2/2] Revert "msm: kgsl: Call dma_buf_unmap_attachment() early"
+
+This reverts msm-5.10 commit b84bd97e37f8ac3a0f3194ebcbb1fa962e42cd73.
+
+Warnings for direct dma clients during cache operations are now being
+suppressed by dma-buf driver. Instead of doing dma_buf_unmap_attachment
+early if we do it in destroy path, it helps in saving cycles and
+improving performance during app launch. This is also helping in fixing
+EGL image corruption issue.
+
+Change-Id: Ic66dd3b66136318abf59685f95fee17890377fd4
+Signed-off-by: Pankaj Gupta <quic_gpankaj@quicinc.com>
+(cherry picked from commit 085a050df7ac65e2bd2805e71cd9eed40ca34c74)
+---
+ kgsl.c | 5 ++---
+ 1 file changed, 2 insertions(+), 3 deletions(-)
+
+diff --git a/kgsl.c b/kgsl.c
+index 8a1209c..5c68788 100644
+--- a/kgsl.c
++++ b/kgsl.c
+@@ -1,7 +1,7 @@
+ // SPDX-License-Identifier: GPL-2.0-only
+ /*
+  * Copyright (c) 2008-2021, The Linux Foundation. All rights reserved.
+- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
++ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+  */
+ 
+ #include <uapi/linux/sched/types.h>
+@@ -341,6 +341,7 @@ static void kgsl_destroy_ion(struct kgsl_memdesc *memdesc)
+ 
+ 	if (meta != NULL) {
+ 		remove_dmabuf_list(meta);
++		dma_buf_unmap_attachment(meta->attach, memdesc->sgt, DMA_BIDIRECTIONAL);
+ 		dma_buf_detach(meta->dmabuf, meta->attach);
+ 		dma_buf_put(meta->dmabuf);
+ 		kfree(meta);
+@@ -3268,8 +3269,6 @@ static int kgsl_setup_dma_buf(struct kgsl_device *device,
+ 		goto out;
+ 	}
+ 
+-	dma_buf_unmap_attachment(attach, sg_table, DMA_BIDIRECTIONAL);
+-
+ 	meta->table = sg_table;
+ 	entry->priv_data = meta;
+ 	entry->memdesc.sgt = sg_table;

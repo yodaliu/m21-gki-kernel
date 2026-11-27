@@ -1,0 +1,28 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: yodaliu <yodaliu@gmail.com>
+Date: Fri, 27 Nov 2026 12:32:59 +0800
+Subject: [PATCH 10/15] tty: serial: msm_geni: force 115200 baud except on
+ ttyHS0
+
+Reconstructed from the stock FiiO M21 FW 1.1.0 module by disassembly
+comparison; the rebuilt module matches the stock one.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ drivers/tty/serial/msm_geni_serial.c | 3 +++
+ 1 file changed, 3 insertions(+)
+
+diff --git a/drivers/tty/serial/msm_geni_serial.c b/drivers/tty/serial/msm_geni_serial.c
+index fd8c01dc78b..d139f97643f 100644
+--- a/drivers/tty/serial/msm_geni_serial.c
++++ b/drivers/tty/serial/msm_geni_serial.c
+@@ -3806,6 +3806,9 @@ static void msm_geni_serial_set_termios(struct uart_port *uport,
+ 
+ 	/* baud rate */
+ 	baud = uart_get_baud_rate(uport, termios, old, 300, 4000000);
++	/* only ttyHS0 may change its baud rate; the other ports stay at 115200 */
++	if (strcmp(uport->name, "ttyHS0"))
++		baud = 115200;
+ 	port->cur_baud = baud;
+ 	if (msm_geni_serial_config_baud_rate(uport, termios, baud))
+ 		goto exit_set_termios;

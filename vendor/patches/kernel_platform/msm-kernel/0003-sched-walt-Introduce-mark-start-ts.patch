@@ -1,0 +1,67 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Shaleen Agrawal <quic_shalagra@quicinc.com>
+Date: Tue, 8 Aug 2023 18:31:23 -0700
+Subject: [PATCH 03/15] sched/walt: Introduce mark start ts
+
+Print out the timestamp at which the task's mark_start is first set to
+help debug issues.
+
+Change-Id: Id440e873a75901e8888a68fbe09ba6c51e3acfb1
+Signed-off-by: Shaleen Agrawal <quic_shalagra@quicinc.com>
+Signed-off-by: Srinivasarao Pathipati <quic_c_spathi@quicinc.com>
+---
+ include/linux/sched/walt.h | 1 +
+ kernel/sched/walt/walt.c   | 5 ++++-
+ 2 files changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/include/linux/sched/walt.h b/include/linux/sched/walt.h
+index 795f1c3ed8c..047b91e3b57 100644
+--- a/include/linux/sched/walt.h
++++ b/include/linux/sched/walt.h
+@@ -140,6 +140,7 @@ struct walt_task_struct {
+ 	int				prev_cpu;
+ 	int				new_cpu;
+ 	u8				enqueue_after_migration;
++	u64				mark_start_birth_ts;
+ };
+ 
+ /*
+diff --git a/kernel/sched/walt/walt.c b/kernel/sched/walt/walt.c
+index aa3890095d9..a461af1494c 100644
+--- a/kernel/sched/walt/walt.c
++++ b/kernel/sched/walt/walt.c
+@@ -206,7 +206,6 @@ void walt_task_dump(struct task_struct *p)
+ 	SCHED_PRINT(wts->demand);
+ 	SCHED_PRINT(wts->coloc_demand);
+ 	SCHED_PRINT(wts->enqueue_after_migration);
+-	SCHED_PRINT(wts->last_sleep_ts);
+ 	SCHED_PRINT(wts->prev_cpu);
+ 	SCHED_PRINT(wts->new_cpu);
+ 	SCHED_PRINT(wts->misfit);
+@@ -229,8 +228,10 @@ void walt_task_dump(struct task_struct *p)
+ 	printk_deferred("%s=%u (%s)\n", STRG(wts->prev_window),
+ 			wts->prev_window, buff);
+ 
++	SCHED_PRINT(wts->last_sleep_ts);
+ 	SCHED_PRINT(wts->last_wake_ts);
+ 	SCHED_PRINT(wts->last_enqueued_ts);
++	SCHED_PRINT(wts->mark_start_birth_ts);
+ 	SCHED_PRINT(wts->misfit);
+ 	SCHED_PRINT(wts->unfilter);
+ 	SCHED_PRINT(is_32bit_thread);
+@@ -2396,6 +2397,7 @@ static void init_new_task_load(struct task_struct *p)
+ 	wts->total_exec = 0;
+ 	wts->mvp_prio = WALT_NOT_MVP;
+ 	wts->cidx = 0;
++	wts->mark_start_birth_ts = 0;
+ 	__sched_fork_init(p);
+ 	walt_flag_set(p, WALT_INIT, 1);
+ }
+@@ -2422,6 +2424,7 @@ static void mark_task_starting(struct task_struct *p)
+ 	wallclock = walt_rq_clock(rq);
+ 	wts->mark_start = wts->last_wake_ts = wallclock;
+ 	wts->last_enqueued_ts = wallclock;
++	wts->mark_start_birth_ts = wallclock;
+ 	update_task_cpu_cycles(p, cpu_of(rq), wallclock);
+ }
+ 

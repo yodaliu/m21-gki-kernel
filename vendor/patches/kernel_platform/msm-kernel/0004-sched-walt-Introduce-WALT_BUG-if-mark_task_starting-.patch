@@ -1,0 +1,34 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Shaleen Agrawal <quic_shalagra@quicinc.com>
+Date: Wed, 9 Aug 2023 10:27:33 -0700
+Subject: [PATCH 04/15] sched/walt: Introduce WALT_BUG if mark_task_starting
+ occurs  twice
+
+mark_task_starting should be called on a newly woken up task. At this
+point, it's mark_start should not be set. Therefore, if mark_start
+happens to already be set, do a WALT_BUG.
+
+Change-Id: I47105da7305df428ce31677442a13a7eb2a67b51
+Signed-off-by: Shaleen Agrawal <quic_shalagra@quicinc.com>
+Signed-off-by: Srinivasarao Pathipati <quic_c_spathi@quicinc.com>
+---
+ kernel/sched/walt/walt.c | 6 ++++++
+ 1 file changed, 6 insertions(+)
+
+diff --git a/kernel/sched/walt/walt.c b/kernel/sched/walt/walt.c
+index a461af1494c..f2cbe96b60a 100644
+--- a/kernel/sched/walt/walt.c
++++ b/kernel/sched/walt/walt.c
+@@ -2422,6 +2422,12 @@ static void mark_task_starting(struct task_struct *p)
+ 	struct walt_task_struct *wts = (struct walt_task_struct *) p->android_vendor_data1;
+ 
+ 	wallclock = walt_rq_clock(rq);
++	if (wts->mark_start)
++		WALT_BUG(WALT_BUG_WALT, p,
++				"CPU%d: %s task %s(%d)'s ms=%llu is already set!!",
++				raw_smp_processor_id(), __func__, p->comm, p->pid,
++				wts->mark_start);
++
+ 	wts->mark_start = wts->last_wake_ts = wallclock;
+ 	wts->last_enqueued_ts = wallclock;
+ 	wts->mark_start_birth_ts = wallclock;

@@ -1,0 +1,25 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: yodaliu <yodaliu@gmail.com>
+Date: Fri, 27 Nov 2026 12:32:59 +0800
+Subject: [PATCH 12/15] pinctrl: qcom: spmi-gpio: delay 100 ms at end of probe
+
+Reconstructed from the stock FiiO M21 FW 1.1.0 module by disassembly
+comparison; the rebuilt module matches the stock one.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ drivers/pinctrl/qcom/pinctrl-spmi-gpio.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/drivers/pinctrl/qcom/pinctrl-spmi-gpio.c b/drivers/pinctrl/qcom/pinctrl-spmi-gpio.c
+index d19b1fbb1f2..cc03aa09c66 100644
+--- a/drivers/pinctrl/qcom/pinctrl-spmi-gpio.c
++++ b/drivers/pinctrl/qcom/pinctrl-spmi-gpio.c
+@@ -1174,6 +1174,7 @@ static int pmic_gpio_probe(struct platform_device *pdev)
+ 		}
+ 	}
+ 
++	mdelay(100);
+ 	return 0;
+ 
+ err_range:

@@ -1,0 +1,44 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: yodaliu <yodaliu@gmail.com>
+Date: Fri, 27 Nov 2026 12:32:59 +0800
+Subject: [PATCH 14/15] sound: usb: qmi: fix period size/count and set
+ altsetting before endpoint setup
+
+Constrain offload streams to 480-frame periods x 8 and select the data
+endpoint altsetting before configuring it.
+
+Reconstructed from the stock FiiO M21 FW 1.1.0 module by disassembly
+comparison; the rebuilt module matches the stock one.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ sound/usb/usb_audio_qmi_svc.c | 9 +++++++++
+ 1 file changed, 9 insertions(+)
+
+diff --git a/sound/usb/usb_audio_qmi_svc.c b/sound/usb/usb_audio_qmi_svc.c
+index ff7ec3a0115..b7efff7198e 100644
+--- a/sound/usb/usb_audio_qmi_svc.c
++++ b/sound/usb/usb_audio_qmi_svc.c
+@@ -1359,6 +1359,11 @@ static int configure_endpoints(struct snd_usb_audio *chip,
+ {
+ 	int err;
+ 
++	/* select the data endpoint's altsetting before configuring it */
++	if (subs->data_endpoint)
++		usb_set_interface(chip->dev, subs->data_endpoint->iface,
++				  subs->data_endpoint->altsetting);
++
+ 	if (subs->data_endpoint->need_setup) {
+ 		err = snd_usb_endpoint_configure(chip, subs->data_endpoint);
+ 		if (err < 0) {
+@@ -1474,6 +1479,10 @@ static int enable_audio_stream(struct snd_usb_substream *subs,
+ 			channels, 0);
+ 	_snd_pcm_hw_param_set(&params, SNDRV_PCM_HW_PARAM_RATE,
+ 			cur_rate, 0);
++	_snd_pcm_hw_param_set(&params, SNDRV_PCM_HW_PARAM_PERIOD_SIZE,
++			480, 0);
++	_snd_pcm_hw_param_set(&params, SNDRV_PCM_HW_PARAM_PERIODS,
++			8, 0);
+ 
+ 	if (!chip->intf[0])
+ 		return -ENODEV;

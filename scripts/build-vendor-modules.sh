@@ -34,7 +34,28 @@ chmod +x "$PAHOLE_W"
 K=(make -C "$SRC" O="$VOUT/kernel" ARCH=arm64 LLVM=1 LLVM_IAS=1 -j"$JOBS" KCFLAGS=-D__ANDROID_COMMON_KERNEL__
    PAHOLE="$PAHOLE_W")
 
+# vendor/patches/<checkout path>/*.patch: upstream fixes the stock modules carry beyond the pinned commit, and
+# FiiO/Quectel changes reconstructed from the stock modules.  The series is applied to the working tree on
+# top of the commit pinned in vendor/SOURCES; skipped when the touched files already hold the patched result.
+apply_vendor_patches() {
+  local dir=$1 pd="$HERE/vendor/patches/$1" ps base tree idx
+  [ -d "$pd" ] || return 0
+  ps=("$pd"/*.patch)
+  base=$(awk -F'|' -v d="$dir" '{sub(/\r$/, "")} $1 == d {print $3}' "$HERE/vendor/SOURCES")
+  [ -n "$base" ] || { echo "$dir: not in vendor/SOURCES" >&2; exit 1; }
+  idx=$(mktemp)
+  tree=$(cd "$VWORK/$dir" && export GIT_INDEX_FILE=$idx && git read-tree "$base" &&
+         git apply --cached "${ps[@]}" && git write-tree)
+  rm -f "$idx"
+  if git -C "$VWORK/$dir" diff --quiet "$tree" -- $(sed -n 's|^+++ b/||p' "${ps[@]}" | sort -u); then
+    return 0
+  fi
+  git -C "$VWORK/$dir" apply "${ps[@]}"
+  echo "$dir: applied ${#ps[@]} patches"
+}
+
 build_kernel() {
+  apply_vendor_patches kernel_platform/msm-kernel
   # extract-cert only: lets the host tool build with OpenSSL 3 (same patch as the M21 kernel)
   # (msm-kernel's extract-cert.c is 7 lines off ACK 5.15.220, hence patch(1) with fuzz, not git apply)
   local p=$(ls "$HERE"/patches/0001-*.patch)
@@ -70,6 +91,8 @@ untab() {
 
 tp() {  # tp <name> <dir> [kbuild args...]
   local n=$1 d=$2; shift 2
+  # TP_ONLY="audio kgsl": build only these techpacks
+  [ -z "${TP_ONLY:-}" ] || [[ " $TP_ONLY " == *" $n "* ]] || return 0
   untab "$d"
   if "${K[@]}" M="$d" KERNEL_SRC="$SRC" modules "$@" > "$LOG/$n.log" 2>&1; then
     echo "ok     $n: $(find "$d" -name '*.ko' | wc -l) modules"
@@ -81,6 +104,10 @@ sym() { echo "$V/$1/Module.symvers"; }
 
 build_techpacks() {
   [ -f "$VOUT/kernel/Module.symvers" ] || { echo "build the kernel stage first" >&2; exit 1; }
+  local pd
+  for pd in $(cd "$HERE/vendor/patches" && find vendor -name '*.patch' -printf '%h\n' | sort -u); do
+    apply_vendor_patches "$pd"
+  done
   # mmrm_test_module's source (test/) is not public; build the driver only
   [ -f "$V/mmrm-driver/test/Kbuild" ] || { mkdir -p "$V/mmrm-driver/test"; : > "$V/mmrm-driver/test/Kbuild"; }
   tp securemsm "$V/securemsm-kernel" SSG_MODULE_ROOT="$V/securemsm-kernel" BOARD_PLATFORM=bengal
@@ -99,8 +126,10 @@ build_techpacks() {
      KBUILD_EXTRA_SYMBOLS="$(sym wlan/platform)"
   tp audio "$V/audio-kernel" AUDIO_ROOT="$V/audio-kernel" MODNAME=audio
   tp kgsl "$V/graphics-kernel" KGSL_PATH="$V/graphics-kernel" MODNAME=msm_kgsl BOARD_PLATFORM=bengal
+  # msm_drm imports fiio_device_register/fiio_device_get_data_by_name from the FiiO private module
+  # fiio_primary_modules (not built here); vendor/symvers/fiio-private.symvers holds its export CRCs
   tp display "$V/display-drivers/msm" DISPLAY_ROOT="$V/display-drivers" MODNAME=msm_drm BOARD_PLATFORM=bengal \
-     KBUILD_EXTRA_SYMBOLS="$(sym mmrm-driver) $(sym securemsm-kernel)"
+     KBUILD_EXTRA_SYMBOLS="$(sym mmrm-driver) $(sym securemsm-kernel) $HERE/vendor/symvers/fiio-private.symvers"
   tp video "$V/video-driver" VIDEO_ROOT="$V/video-driver" MODNAME=msm_video BOARD_PLATFORM=bengal \
      KBUILD_EXTRA_SYMBOLS="$(sym mmrm-driver)"
   tp camera "$V/camera-kernel" CAMERA_KERNEL_ROOT="$V/camera-kernel" KERNEL_ROOT="$SRC" MODNAME=camera BOARD_PLATFORM=bengal

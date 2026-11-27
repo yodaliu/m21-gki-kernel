@@ -1,0 +1,233 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: yodaliu <yodaliu@gmail.com>
+Date: Fri, 27 Nov 2026 13:09:10 +0800
+Subject: [PATCH 3/3] disp: msm: dsi: FiiO M21 in-cell touch panel support
+
+- qcom,platform-tp-reset-gpio: reset line of the touch controller of an
+  in-cell panel, pulsed after the panel reset when the touch driver reports
+  the axs_ts controller.
+- Keep the panel reset and disp_en GPIOs on at power off while the touch
+  controller waits for a wake-up gesture.
+- Register with the FiiO device registry (fiio_device_register) and look up
+  the "ts module" data the touch driver publishes. These symbols come from
+  the FiiO private modules.
+
+Reconstructed from the stock FiiO M21 FW 1.1.0 msm_drm; the rebuilt module
+matches it apart from register allocation in dsi_panel_power_on.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ msm/dsi/dsi_panel.c | 92 ++++++++++++++++++++++++++++++++++++++++++---
+ msm/dsi/dsi_panel.h | 23 ++++++++++++
+ 2 files changed, 109 insertions(+), 6 deletions(-)
+
+diff --git a/msm/dsi/dsi_panel.c b/msm/dsi/dsi_panel.c
+index 09419692..7102172c 100644
+--- a/msm/dsi/dsi_panel.c
++++ b/msm/dsi/dsi_panel.c
+@@ -179,6 +179,9 @@ static int dsi_panel_gpio_release(struct dsi_panel *panel)
+ 	if (gpio_is_valid(r_config->reset_gpio))
+ 		gpio_free(r_config->reset_gpio);
+ 
++	if (gpio_is_valid(r_config->tp_reset_gpio))
++		gpio_free(r_config->tp_reset_gpio);
++
+ 	if (gpio_is_valid(r_config->disp_en_gpio))
+ 		gpio_free(r_config->disp_en_gpio);
+ 
+@@ -253,11 +256,56 @@ static int dsi_panel_trigger_esd_attack(struct dsi_panel *panel)
+ 	return dsi_panel_trigger_esd_attack_sub(r_config->reset_gpio);
+ }
+ 
++static struct ts_public_data *g_ts_module;
++
++static void dsi_panel_fiio_load_work(void)
++{
++	printk("[%s] : Enter!\n", __func__);
++	if (!g_ts_module) {
++		g_ts_module = fiio_device_get_data_by_name("ts module");
++		if (!g_ts_module)
++			printk("[%s] get ts module failed!\n", __func__);
++	}
++}
++
++static struct fiio_device_driver dsi_panel_device_driver = {
++	.name = "dsi_panel module",
++	.load_work = dsi_panel_fiio_load_work,
++};
++
++/* in-cell panel: the touch controller (axs_ts) shares the panel reset */
++static bool check_lcd_type_is_incell(void)
++{
++	if (!g_ts_module || !g_ts_module->get_vaild_tp_name)
++		return false;
++	printk("%s, get_vaild_tp_name = %s\n", __func__,
++		g_ts_module->get_vaild_tp_name());
++	return !strcmp("axs_ts", g_ts_module->get_vaild_tp_name());
++}
++
++/* keep the panel powered while the touch controller waits for a wake-up gesture */
++static bool check_gesture_wakeup(void)
++{
++	bool wakeup;
++
++	if (!g_ts_module || !g_ts_module->get_vaild_tp_name ||
++	    !g_ts_module->is_gesture_wakeup)
++		return false;
++	printk("%s, get_vaild_tp_name = %s\n", __func__,
++		g_ts_module->get_vaild_tp_name());
++	if (strcmp("axs_ts", g_ts_module->get_vaild_tp_name()))
++		return false;
++	wakeup = g_ts_module->is_gesture_wakeup();
++	printk("%s, g_ts_module->is_gesture_wakeup = %d\n", __func__, wakeup);
++	return wakeup;
++}
++
+ static int dsi_panel_reset(struct dsi_panel *panel)
+ {
+ 	int rc = 0;
+ 	struct dsi_panel_reset_config *r_config = &panel->reset_config;
+ 	int i;
++	bool is_incell_lcd = check_lcd_type_is_incell();
+ 
+ 	if (!gpio_is_valid(r_config->reset_gpio))
+ 		goto skip_reset_gpio;
+@@ -289,6 +337,21 @@ static int dsi_panel_reset(struct dsi_panel *panel)
+ 				(r_config->sequence[i].sleep_ms * 1000) + 100);
+ 	}
+ 
++	if (is_incell_lcd && gpio_is_valid(r_config->tp_reset_gpio)) {
++		rc = gpio_direction_output(r_config->tp_reset_gpio, 1);
++		if (rc)
++			goto tp_rst_err;
++		usleep_range(20000, 20100);
++		rc = gpio_direction_output(r_config->tp_reset_gpio, 0);
++		if (rc)
++			goto tp_rst_err;
++		usleep_range(20000, 20100);
++		rc = gpio_direction_output(r_config->tp_reset_gpio, 1);
++		if (rc)
++			goto tp_rst_err;
++		usleep_range(50000, 50100);
++	}
++
+ skip_reset_gpio:
+ 	if (gpio_is_valid(panel->bl_config.en_gpio)) {
+ 		rc = gpio_direction_output(panel->bl_config.en_gpio, 1);
+@@ -324,6 +387,9 @@ skip_reset_gpio:
+ 
+ exit:
+ 	return rc;
++tp_rst_err:
++	DSI_ERR("unable to set dir for tp rst gpio rc=%d\n", rc);
++	return rc;
+ }
+ 
+ static int dsi_panel_set_pinctrl_state(struct dsi_panel *panel, bool enable)
+@@ -395,18 +461,21 @@ exit:
+ static int dsi_panel_power_off(struct dsi_panel *panel)
+ {
+ 	int rc = 0;
++	bool is_gesture_wakeup = check_gesture_wakeup();
+ 
+ 	if (panel->is_twm_en || panel->skip_panel_off) {
+ 		DSI_DEBUG("TWM Enabled, skip panel power off\n");
+ 		return rc;
+ 	}
+ 
+-	if (gpio_is_valid(panel->reset_config.disp_en_gpio))
+-		gpio_set_value(panel->reset_config.disp_en_gpio, 0);
++	if (!is_gesture_wakeup) {
++		if (gpio_is_valid(panel->reset_config.disp_en_gpio))
++			gpio_set_value(panel->reset_config.disp_en_gpio, 0);
+ 
+-	if (gpio_is_valid(panel->reset_config.reset_gpio) &&
+-					!panel->reset_gpio_always_on)
+-		gpio_set_value(panel->reset_config.reset_gpio, 0);
++		if (gpio_is_valid(panel->reset_config.reset_gpio) &&
++						!panel->reset_gpio_always_on)
++			gpio_set_value(panel->reset_config.reset_gpio, 0);
++	}
+ 
+ 	if (gpio_is_valid(panel->reset_config.lcd_mode_sel_gpio))
+ 		gpio_set_value(panel->reset_config.lcd_mode_sel_gpio, 0);
+@@ -2385,14 +2454,16 @@ static int dsi_panel_parse_gpios(struct dsi_panel *panel)
+ 	int rc = 0;
+ 	const char *data;
+ 	struct dsi_parser_utils *utils = &panel->utils;
+-	char *reset_gpio_name, *mode_set_gpio_name;
++	char *reset_gpio_name, *mode_set_gpio_name, *tp_reset_gpio_name;
+ 
+ 	if (!strcmp(panel->type, "primary")) {
+ 		reset_gpio_name = "qcom,platform-reset-gpio";
+ 		mode_set_gpio_name = "qcom,panel-mode-gpio";
++		tp_reset_gpio_name = "qcom,platform-tp-reset-gpio";
+ 	} else {
+ 		reset_gpio_name = "qcom,platform-sec-reset-gpio";
+ 		mode_set_gpio_name = "qcom,panel-sec-mode-gpio";
++		tp_reset_gpio_name = NULL;
+ 	}
+ 
+ 	panel->reset_config.reset_gpio = utils->get_named_gpio(utils->data,
+@@ -2403,6 +2474,12 @@ static int dsi_panel_parse_gpios(struct dsi_panel *panel)
+ 			panel->reset_config.reset_gpio);
+ 	}
+ 
++	panel->reset_config.tp_reset_gpio = utils->get_named_gpio(utils->data,
++					      tp_reset_gpio_name, 0);
++	if (!gpio_is_valid(panel->reset_config.tp_reset_gpio))
++		DSI_ERR("[%s] tp reset gpio not set, rc=%d\n", panel->name,
++			panel->reset_config.tp_reset_gpio);
++
+ 	panel->reset_config.disp_en_gpio = utils->get_named_gpio(utils->data,
+ 						"qcom,5v-boost-gpio",
+ 						0);
+@@ -3728,6 +3805,9 @@ struct dsi_panel *dsi_panel_get(struct device *parent,
+ 
+ 	drm_panel_add(&panel->drm_panel);
+ 
++	fiio_device_register(&dsi_panel_device_driver);
++	dsi_panel_fiio_load_work();
++
+ 	mutex_init(&panel->panel_lock);
+ 
+ 	return panel;
+diff --git a/msm/dsi/dsi_panel.h b/msm/dsi/dsi_panel.h
+index ad1e52c0..db490313 100644
+--- a/msm/dsi/dsi_panel.h
++++ b/msm/dsi/dsi_panel.h
+@@ -160,11 +160,34 @@ struct dsi_reset_seq {
+ 	u32 sleep_ms;
+ };
+ 
++/*
++ * FiiO device registry (provided by the FiiO private modules): drivers register
++ * a load_work callback and look up each other's data by name.
++ */
++struct fiio_device_driver {
++	const char *name;
++	void *private_data;
++	void (*load_work)(void);
++};
++
++int fiio_device_register(struct fiio_device_driver *drv);
++void *fiio_device_get_data_by_name(const char *name);
++
++/* data the touch-panel driver publishes as "ts module" */
++struct ts_public_data {
++	char *(*get_vaild_tp_name)(void);
++	bool (*is_gesture_wakeup)(void);
++	void (*set_screen_off)(bool off);
++	bool is_abnormal;
++	bool is_report_abnormal;
++};
++
+ struct dsi_panel_reset_config {
+ 	struct dsi_reset_seq *sequence;
+ 	u32 count;
+ 
+ 	int reset_gpio;
++	int tp_reset_gpio;
+ 	int disp_en_gpio;
+ 	int lcd_mode_sel_gpio;
+ 	u32 mode_sel_state;

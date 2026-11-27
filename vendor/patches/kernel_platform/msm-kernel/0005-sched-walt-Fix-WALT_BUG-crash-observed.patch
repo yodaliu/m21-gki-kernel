@@ -1,0 +1,62 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Shaleen Agrawal <quic_shalagra@quicinc.com>
+Date: Wed, 16 Aug 2023 10:32:28 -0700
+Subject: [PATCH 05/15] sched/walt: Fix WALT_BUG crash observed
+
+A WALT_BUG crash was intermittently observed, where a task's mark_start
+would appear to have moved ahead of a task's window_start by more than
+one window.
+
+In order to debug this further, a series of additional WALT_BUGs were
+introduce, which yielded in a crash where mark_task_starting was being
+called by a task whose mark_start had already been set.
+
+In wake_up_new_task, prior to trace_android_rvh_new_task_stats being
+referenced (which is where mark_start is supposed to be initialized), it
+is possible that another call to UTRA sneaks by during the fork
+balancing step, at the end of which, mark_start would be initialized.
+
+Address this by reorganizing mark_task_starting to acknowledge that
+another UTRA may have initialized mark_start, and further add clarity by
+updating the CPU cycles through a reference to UTRA rather than doing so
+directly.
+
+Change-Id: Iae4efad890417d3708048ae95eea0532776ad24a
+Signed-off-by: Shaleen Agrawal <quic_shalagra@quicinc.com>
+Signed-off-by: Srinivasarao Pathipati <quic_c_spathi@quicinc.com>
+---
+ kernel/sched/walt/walt.c | 16 ++++++----------
+ 1 file changed, 6 insertions(+), 10 deletions(-)
+
+diff --git a/kernel/sched/walt/walt.c b/kernel/sched/walt/walt.c
+index f2cbe96b60a..5692747e007 100644
+--- a/kernel/sched/walt/walt.c
++++ b/kernel/sched/walt/walt.c
+@@ -2417,21 +2417,17 @@ static void walt_task_dead(struct task_struct *p)
+ 
+ static void mark_task_starting(struct task_struct *p)
+ {
+-	u64 wallclock;
+ 	struct rq *rq = task_rq(p);
+ 	struct walt_task_struct *wts = (struct walt_task_struct *) p->android_vendor_data1;
++	u64 wallclock = walt_rq_clock(rq);
+ 
+-	wallclock = walt_rq_clock(rq);
+-	if (wts->mark_start)
+-		WALT_BUG(WALT_BUG_WALT, p,
+-				"CPU%d: %s task %s(%d)'s ms=%llu is already set!!",
+-				raw_smp_processor_id(), __func__, p->comm, p->pid,
+-				wts->mark_start);
+-
+-	wts->mark_start = wts->last_wake_ts = wallclock;
++	wts->last_wake_ts = wallclock;
+ 	wts->last_enqueued_ts = wallclock;
+ 	wts->mark_start_birth_ts = wallclock;
+-	update_task_cpu_cycles(p, cpu_of(rq), wallclock);
++
++	if (wts->mark_start)
++		return;
++	walt_update_task_ravg(p, rq, TASK_UPDATE, wallclock, 0);
+ }
+ 
+ /*

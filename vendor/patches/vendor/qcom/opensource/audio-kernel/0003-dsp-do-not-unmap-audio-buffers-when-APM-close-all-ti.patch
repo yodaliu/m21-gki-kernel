@@ -1,0 +1,176 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: yodaliu <yodaliu@gmail.com>
+Date: Fri, 27 Nov 2026 12:55:32 +0800
+Subject: [PATCH 3/4] dsp: do not unmap audio buffers when APM close-all times
+ out
+
+spf_core_apm_close_all() now returns -1 when the ADSP does not answer. In that
+case audio_pkt_release() and check_userspace_service_state() call the new
+msm_audio_ion_free_fd_data(), which drops the fd list without unmapping the
+buffers the ADSP may still use, instead of msm_audio_ion_crash_handler().
+spf_core_is_apm_ready() waits 100 ms before polling.
+
+Reconstructed from the stock FiiO M21 FW 1.1.0 modules (spf_core_dlkm,
+audpkt_ion_dlkm, audio_pkt_dlkm, machine_dlkm); the rebuilt modules match them.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ asoc/msm_common.c           | 10 +++++++---
+ dsp/msm_audio_ion.c         | 22 ++++++++++++++++++++++
+ dsp/spf-core.c              | 14 ++++++++------
+ include/dsp/msm_audio_ion.h |  1 +
+ include/dsp/spf-core.h      |  2 +-
+ ipc/audio-pkt.c             |  6 ++++--
+ 6 files changed, 43 insertions(+), 12 deletions(-)
+
+diff --git a/asoc/msm_common.c b/asoc/msm_common.c
+index 4c7bdb18..8fdb9609 100644
+--- a/asoc/msm_common.c
++++ b/asoc/msm_common.c
+@@ -229,10 +229,14 @@ static void check_userspace_service_state(struct snd_soc_pcm_runtime *rtd,
+ 		dev_info(rtd->card->dev, "%s userspace service crashed\n",
+ 					__func__);
+ 		if (pdata->dsp_sessions_closed == 0) {
++			pr_err("%s, line=%d\n", __func__, __LINE__);
+ 			/*Issue close all graph cmd to DSP*/
+-			spf_core_apm_close_all();
+-			/*unmap all dma mapped buffers*/
+-			msm_audio_ion_crash_handler();
++			if (spf_core_apm_close_all() < 0)
++				/* ADSP did not answer: forget the buffers, do not unmap */
++				msm_audio_ion_free_fd_data();
++			else
++				/*unmap all dma mapped buffers*/
++				msm_audio_ion_crash_handler();
+ 			pdata->dsp_sessions_closed = 1;
+ 		}
+ 		/*Reset the state as sysfs node wont be triggred*/
+diff --git a/dsp/msm_audio_ion.c b/dsp/msm_audio_ion.c
+index f7bfbfce..dcca96d5 100644
+--- a/dsp/msm_audio_ion.c
++++ b/dsp/msm_audio_ion.c
+@@ -636,6 +636,28 @@ void msm_audio_ion_crash_handler(void)
+ }
+ EXPORT_SYMBOL(msm_audio_ion_crash_handler);
+ 
++void msm_audio_ion_free_fd_data(void)
++{
++	struct msm_audio_fd_data *msm_audio_fd_data = NULL;
++	struct list_head *ptr, *next;
++
++	pr_err("Inside %s\n", __func__);
++	mutex_lock(&(msm_audio_ion_fd_list.list_mutex));
++	list_for_each_entry(msm_audio_fd_data,
++		&msm_audio_ion_fd_list.fd_list, list) {
++		msm_audio_fd_data->hyp_assign = false;
++	}
++	list_for_each_safe(ptr, next,
++		&msm_audio_ion_fd_list.fd_list) {
++		msm_audio_fd_data = list_entry(ptr, struct msm_audio_fd_data,
++						list);
++		list_del(&(msm_audio_fd_data->list));
++		kfree(msm_audio_fd_data);
++	}
++	mutex_unlock(&(msm_audio_ion_fd_list.list_mutex));
++}
++EXPORT_SYMBOL(msm_audio_ion_free_fd_data);
++
+ static int msm_audio_ion_open(struct inode *inode, struct file *file)
+ {
+ 	int ret = 0;
+diff --git a/dsp/spf-core.c b/dsp/spf-core.c
+index 33c88df8..2132a304 100644
+--- a/dsp/spf-core.c
++++ b/dsp/spf-core.c
+@@ -173,6 +173,7 @@ bool spf_core_is_apm_ready(void)
+ 
+ 	timeout = jiffies + msecs_to_jiffies(APM_STATE_READY_TIMEOUT_MS);
+ 	mutex_lock(&core->lock);
++	msleep(100);
+ 	for (;;) {
+ 		if (__spf_core_is_apm_ready(core)) {
+ 			ret = true;
+@@ -195,23 +196,23 @@ EXPORT_SYMBOL_GPL(spf_core_is_apm_ready);
+ /**
+  * spf_core_apm_close_all() - Get status of adsp
+  *
+- * Return: Will be return true if apm is ready and false if not.
++ * Return: -1 if the ADSP did not answer in time, 0 otherwise.
+  */
+-void spf_core_apm_close_all(void)
++int spf_core_apm_close_all(void)
+ {
+-	int rc = 0;
++	int rc = 0, ret = 0;
+ 	struct spf_core *core;
+ 	struct gpr_pkt pkt;
+ 	struct gpr_device *adev = NULL;
+ 
+ 	if (!spf_core_priv)
+-		return;
++		return 0;
+ 
+ 	mutex_lock(&spf_core_priv->lock);
+ 	core = spf_core_priv->spf_core_drv;
+ 	if (!core) {
+ 		mutex_unlock(&spf_core_priv->lock);
+-		return;
++		return 0;
+ 	}
+ 
+ 	mutex_lock(&core->lock);
+@@ -249,13 +250,14 @@ void spf_core_apm_close_all(void)
+ 	} else {
+ 		dev_err_ratelimited(spf_core_priv->dev, "%s: command timedout, ret\n",
+ 			__func__);
++		ret = -1;
+         }
+ 
+ done:
+ 	core->resp_received = false;
+ 	mutex_unlock(&core->lock);
+ 	mutex_unlock(&spf_core_priv->lock);
+-	return;
++	return ret;
+ }
+ EXPORT_SYMBOL_GPL(spf_core_apm_close_all);
+ 
+diff --git a/include/dsp/msm_audio_ion.h b/include/dsp/msm_audio_ion.h
+index 2e4ed92b..0a6efbc6 100644
+--- a/include/dsp/msm_audio_ion.h
++++ b/include/dsp/msm_audio_ion.h
+@@ -30,4 +30,5 @@ struct audio_buffer {
+ };
+ int msm_audio_get_phy_addr(int fd, u64 *paddr, size_t *pa_len);
+ void msm_audio_ion_crash_handler(void);
++void msm_audio_ion_free_fd_data(void);
+ #endif /* _LINUX_MSM_AUDIO_ION_H */
+diff --git a/include/dsp/spf-core.h b/include/dsp/spf-core.h
+index 1e5e2ba2..916dc48d 100644
+--- a/include/dsp/spf-core.h
++++ b/include/dsp/spf-core.h
+@@ -15,6 +15,6 @@
+ #include <ipc/gpr-lite.h>
+ 
+ bool spf_core_is_apm_ready(void);
+-void spf_core_apm_close_all(void);
++int spf_core_apm_close_all(void);
+ 
+ #endif
+diff --git a/ipc/audio-pkt.c b/ipc/audio-pkt.c
+index 37d9ead0..efd8ed70 100755
+--- a/ipc/audio-pkt.c
++++ b/ipc/audio-pkt.c
+@@ -200,8 +200,10 @@ int audio_pkt_release(struct inode *inode, struct file *file)
+ 	spin_unlock_irqrestore(&audpkt_dev->queue_lock, flags);
+ 
+ 	file->private_data = NULL;
+-	spf_core_apm_close_all();
+-	msm_audio_ion_crash_handler();
++	if (spf_core_apm_close_all() < 0)
++		msm_audio_ion_free_fd_data();
++	else
++		msm_audio_ion_crash_handler();
+ 
+ 	return 0;
+ }

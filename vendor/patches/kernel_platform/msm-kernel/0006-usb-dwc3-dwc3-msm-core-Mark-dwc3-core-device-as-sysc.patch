@@ -1,0 +1,34 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Vijayavardhan Vennapusa <quic_vvreddy@quicinc.com>
+Date: Fri, 19 May 2023 15:21:46 +0530
+Subject: [PATCH 06/15] usb: dwc3: dwc3-msm-core: Mark dwc3 core device as
+ syscore device
+
+During PM suspend, due to lack of proper prepare/complete PM
+callbacks in the device chain, the direct_complete parameter used to
+skip the PM suspend/resume callbacks for the DWC3 core device. During
+hibernation, direct_complete parameter is set to false and hence
+dwc3 PM resume is being called during thaw operation, while dwc3 msm
+is not PM resumed. This results in accessing registers which leads
+unclocked access. Fix it by marking dwc3 core device as syscore device
+to skip dwc3 PM suspend/resume during hibernation entry/exit.
+
+Change-Id: I8b8b8cd28f4a323b989745553ec3fce75209ecaf
+Signed-off-by: Vijayavardhan Vennapusa <quic_vvreddy@quicinc.com>
+(cherry picked from commit f4a82a39ee149fc627f8d0d0389f4e53f5d07618)
+---
+ drivers/usb/dwc3/dwc3-msm-core.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/drivers/usb/dwc3/dwc3-msm-core.c b/drivers/usb/dwc3/dwc3-msm-core.c
+index 9f5f13a6b84..89dc4d47ffc 100644
+--- a/drivers/usb/dwc3/dwc3-msm-core.c
++++ b/drivers/usb/dwc3/dwc3-msm-core.c
+@@ -5555,6 +5555,7 @@ static int dwc3_msm_core_init(struct dwc3_msm *mdwc)
+ 		goto depopulate;
+ 
+ 	dwc3_msm_override_pm_ops(dwc->dev, mdwc->dwc3_pm_ops, false);
++	dev_pm_syscore_device(dwc->dev, true);
+ 
+ 	mdwc->xhci_pm_ops = kzalloc(sizeof(struct dev_pm_ops), GFP_ATOMIC);
+ 	if (!mdwc->xhci_pm_ops)

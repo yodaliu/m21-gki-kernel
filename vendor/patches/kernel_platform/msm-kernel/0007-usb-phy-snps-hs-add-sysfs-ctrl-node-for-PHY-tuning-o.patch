@@ -1,0 +1,150 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: yodaliu <yodaliu@gmail.com>
+Date: Fri, 27 Nov 2026 12:32:58 +0800
+Subject: [PATCH 07/15] usb: phy: snps-hs: add sysfs ctrl node for PHY tuning
+ overrides
+
+Adds a 'ctrl' attribute: reading prints param_ovrd0..3, writing '<n><value>' sets
+param_ovrd<n> (n=1..4) and '9' re-runs msm_hsphy_init(). Also logs the
+override registers at init and sets the vbus draw to 1000 mA.
+
+Reconstructed from the stock FiiO M21 FW 1.1.0 module by disassembly
+comparison; the rebuilt module matches the stock one.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ drivers/usb/phy/phy-msm-snps-hs.c | 79 ++++++++++++++++++++++++++++++-
+ 1 file changed, 77 insertions(+), 2 deletions(-)
+
+diff --git a/drivers/usb/phy/phy-msm-snps-hs.c b/drivers/usb/phy/phy-msm-snps-hs.c
+index 2b55f17e50d..a4395945618 100644
+--- a/drivers/usb/phy/phy-msm-snps-hs.c
++++ b/drivers/usb/phy/phy-msm-snps-hs.c
+@@ -3,6 +3,7 @@
+  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
+  */
+ 
++#include <linux/ctype.h>
+ #include <linux/module.h>
+ #include <linux/kernel.h>
+ #include <linux/err.h>
+@@ -87,6 +88,9 @@
+ 
+ #define USB_HSPHY_VDD_HPM_LOAD			30000	/* uA */
+ 
++struct msm_hsphy;
++static struct msm_hsphy *g_msm_hsphy;
++
+ struct msm_hsphy {
+ 	struct usb_phy		phy;
+ 	void __iomem		*base;
+@@ -460,7 +464,7 @@ static int msm_hsphy_init(struct usb_phy *uphy)
+ 			PARAM_OVRD_MASK, phy->param_ovrd3);
+ 	}
+ 
+-	dev_dbg(uphy->dev, "x0:%08x x1:%08x x2:%08x x3:%08x\n",
++	printk("%s: x0:%02x x1:%02x x2:%02x x3:%02x\n", __func__,
+ 	readl_relaxed(phy->base + USB2PHY_USB_PHY_PARAMETER_OVERRIDE_X0),
+ 	readl_relaxed(phy->base + USB2PHY_USB_PHY_PARAMETER_OVERRIDE_X1),
+ 	readl_relaxed(phy->base + USB2PHY_USB_PHY_PARAMETER_OVERRIDE_X2),
+@@ -603,7 +607,7 @@ static void msm_hsphy_vbus_draw_work(struct work_struct *w)
+ 	dev_info(phy->phy.dev, "Avail curr from USB = %u\n", phy->vbus_draw);
+ 
+ 	/* Set max current limit in uA */
+-	val.intval = 1000 * phy->vbus_draw;
++	val.intval = 1000 * 1000;
+ 	ret = power_supply_set_property(phy->usb_psy, POWER_SUPPLY_PROP_INPUT_CURRENT_LIMIT, &val);
+ 	if (ret) {
+ 		dev_dbg(phy->phy.dev, "Error (%d) setting input current limit\n", ret);
+@@ -756,6 +760,68 @@ static void msm_hsphy_create_debugfs(struct msm_hsphy *phy)
+ 	debugfs_create_x8("param_ovrd3", 0644, phy->root, &phy->param_ovrd3);
+ }
+ 
++static ssize_t msm_hsphy_ctrl_show(struct device *dev,
++		struct device_attribute *attr, char *buf)
++{
++	return sprintf(buf, "%03d%03d%03d%03d\n",
++			g_msm_hsphy->param_ovrd0, g_msm_hsphy->param_ovrd1,
++			g_msm_hsphy->param_ovrd2, g_msm_hsphy->param_ovrd3);
++}
++
++static unsigned long msm_hsphy_strtoul(const char *s)
++{
++	unsigned int base = 0;
++
++	while (isspace(*s))
++		s++;
++	if (*s == '-' || *s == '+') {
++		s++;
++		base = 10;
++	} else if (*s) {
++		base = tolower(s[strlen(s) - 1]) == 'h' ? 16 : 0;
++	}
++	return simple_strtoul(s, NULL, base);
++}
++
++/* "<n><value>": n = 1..4 sets param_ovrd<n-1> = value % 1000 - 100, n = 9 re-runs init */
++static ssize_t msm_hsphy_ctrl_store(struct device *dev,
++		struct device_attribute *attr, const char *buf, size_t count)
++{
++	char cmd[5] = {0};
++	int val;
++
++	if (!count)
++		return count;
++
++	sprintf(cmd, "%.1s", buf);
++	val = msm_hsphy_strtoul(buf);
++	printk("%s buf:%d\n", __func__, val);
++
++	if (!strcmp(cmd, "1"))
++		g_msm_hsphy->param_ovrd0 = val % 1000 - 100;
++	else if (!strcmp(cmd, "2"))
++		g_msm_hsphy->param_ovrd1 = val % 1000 - 100;
++	else if (!strcmp(cmd, "3"))
++		g_msm_hsphy->param_ovrd2 = val % 1000 - 100;
++	else if (!strcmp(cmd, "4"))
++		g_msm_hsphy->param_ovrd3 = val % 1000 - 100;
++	else if (!strcmp(cmd, "9"))
++		msm_hsphy_init(&g_msm_hsphy->phy);
++
++	return count;
++}
++
++static DEVICE_ATTR(ctrl, 0664, msm_hsphy_ctrl_show, msm_hsphy_ctrl_store);
++
++static struct attribute *msm_hsphy_attributes[] = {
++	&dev_attr_ctrl.attr,
++	NULL,
++};
++
++static struct attribute_group msm_hsphy_attribute_group = {
++	.attrs = msm_hsphy_attributes,
++};
++
+ static int msm_hsphy_probe(struct platform_device *pdev)
+ {
+ 	struct msm_hsphy *phy;
+@@ -769,6 +835,8 @@ static int msm_hsphy_probe(struct platform_device *pdev)
+ 		goto err_ret;
+ 	}
+ 
++	g_msm_hsphy = phy;
++
+ 	phy->phy.dev = dev;
+ 	res = platform_get_resource_byname(pdev, IORESOURCE_MEM,
+ 						"hsusb_phy_base");
+@@ -924,6 +992,13 @@ static int msm_hsphy_probe(struct platform_device *pdev)
+ 	INIT_WORK(&phy->vbus_draw_work, msm_hsphy_vbus_draw_work);
+ 	msm_hsphy_create_debugfs(phy);
+ 
++	ret = sysfs_create_group(&pdev->dev.kobj, &msm_hsphy_attribute_group);
++	if (ret) {
++		printk("%s sysfs_create_group() failed!!\n", __func__);
++		return ret;
++	}
++	printk("%s success\n", __func__);
++
+ 	/*
+ 	 * EUD may be enable in boot loader and to keep EUD session alive across
+ 	 * kernel boot till USB phy driver is initialized based on cable status,

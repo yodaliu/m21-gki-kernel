@@ -1,0 +1,1767 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: yodaliu <yodaliu@gmail.com>
+Date: Fri, 27 Nov 2026 13:03:46 +0800
+Subject: [PATCH] Revert "Qseecom: Add qseecom_32bit_impl driver to make
+ qseecom compatible with 32 bit target."
+
+This reverts commit b5f2395e174c0780793d625794f682b2e1fe6c7a.
+
+The stock FW 1.1.0 qseecom_dlkm is built without this driver (no 32-bit ioctl
+conversion, plain copy_from_user/copy_to_user).
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ Kbuild                       |   3 -
+ qseecom/qseecom.c            | 162 +++---
+ qseecom/qseecom_32bit_impl.c | 943 -----------------------------------
+ qseecom/qseecom_32bit_impl.h | 341 -------------
+ 4 files changed, 68 insertions(+), 1381 deletions(-)
+ delete mode 100644 qseecom/qseecom_32bit_impl.c
+ delete mode 100644 qseecom/qseecom_32bit_impl.h
+
+diff --git a/Kbuild b/Kbuild
+index baa2908..a27e97f 100644
+--- a/Kbuild
++++ b/Kbuild
+@@ -13,9 +13,6 @@ ifneq (, $(filter y, $(CONFIG_QTI_QUIN_GVM) $(CONFIG_ARCH_KHAJE) $(CONFIG_ARCH_S
+ 
+     obj-$(CONFIG_QSEECOM) += qseecom_dlkm.o
+     qseecom_dlkm-objs := qseecom/qseecom.o
+-    ifdef CONFIG_COMPAT
+-        qseecom_dlkm-objs += qseecom/qseecom_32bit_impl.o
+-    endif
+ endif
+ 
+ include $(SSG_MODULE_ROOT)/config/sec-kernel_defconfig_smcinvoke.conf
+diff --git a/qseecom/qseecom.c b/qseecom/qseecom.c
+index fca8114..760b1ec 100644
+--- a/qseecom/qseecom.c
++++ b/qseecom/qseecom.c
+@@ -53,9 +53,6 @@
+ #else
+ #include "misc/qseecom_kernel.h"
+ #endif
+-#if IS_ENABLED(CONFIG_COMPAT)
+-#include "qseecom_32bit_impl.h"
+-#endif
+ 
+ #define QSEECOM_DEV			"qseecom"
+ #define QSEOS_VERSION_14		0x14
+@@ -118,25 +115,6 @@
+ #define FDE_FLAG_POS    4
+ #define ENABLE_KEY_WRAP_IN_KS    (1 << FDE_FLAG_POS)
+ 
+-#define K_COPY_FROM_USER(err, dst, src, size) \
+-	do {\
+-		if (!(CONFIG_COMPAT))\
+-			err = copy_from_user((dst),\
+-			(void const __user *)(src),\
+-			(size));\
+-		else\
+-			memmove((dst), (src), (size));\
+-	} while (0)
+-
+-#define K_COPY_TO_USER(err, dst, src, size) \
+-	do {\
+-		if(!(CONFIG_COMPAT))\
+-			err = copy_to_user((void __user *)(dst),\
+-			(src), (size));\
+-		else\
+-			memmove((dst), (src), (size));\
+-	} while (0)
+-
+ enum qseecom_clk_definitions {
+ 	CLK_DFAB = 0,
+ 	CLK_SFPB,
+@@ -1534,7 +1512,7 @@ static int qseecom_register_listener(struct qseecom_dev_handle *data,
+ 	struct qseecom_registered_listener_list *new_entry;
+ 	struct qseecom_registered_listener_list *ptr_svc;
+ 
+-	K_COPY_FROM_USER(ret, &rcvd_lstnr, argp, sizeof(rcvd_lstnr));
++	ret = copy_from_user(&rcvd_lstnr, argp, sizeof(rcvd_lstnr));
+ 	if (ret) {
+ 		pr_err("copy_from_user failed\n");
+ 		return ret;
+@@ -1949,7 +1927,7 @@ static int qseecom_scale_bus_bandwidth(struct qseecom_dev_handle *data,
+ 	if (qseecom.no_clock_support)
+ 		return 0;
+ 
+-	K_COPY_FROM_USER(ret, &req_mode, argp, sizeof(req_mode));
++	ret = copy_from_user(&req_mode, argp, sizeof(req_mode));
+ 	if (ret) {
+ 		pr_err("copy_from_user failed\n");
+ 		return ret;
+@@ -2026,13 +2004,12 @@ static int __qseecom_enable_clk_scale_up(struct qseecom_dev_handle *data)
+ static int qseecom_set_client_mem_param(struct qseecom_dev_handle *data,
+ 						void __user *argp)
+ {
+-	int32_t ret = 0;
++	int32_t ret;
+ 	struct qseecom_set_sb_mem_param_req req;
+ 	size_t len;
+ 
+ 	/* Copy the relevant information needed for loading the image */
+-	K_COPY_FROM_USER(ret, &req, argp, sizeof(req));
+-	if(ret)
++	if (copy_from_user(&req, (void __user *)argp, sizeof(req)))
+ 		return -EFAULT;
+ 
+ 	if ((req.ifd_data_fd <= 0) || (req.virt_sb_base == NULL) ||
+@@ -2781,12 +2758,13 @@ static int qseecom_load_app(struct qseecom_dev_handle *data, void __user *argp)
+ 	bool first_time = false;
+ 
+ 	/* Copy the relevant information needed for loading the image */
+-	K_COPY_FROM_USER(ret, &load_img_req, argp,
+-						sizeof(struct qseecom_load_img_req));
+-	if(ret) {
++	if (copy_from_user(&load_img_req,
++				(void __user *)argp,
++				sizeof(struct qseecom_load_img_req))) {
+ 		pr_err("copy_from_user failed\n");
+ 		return -EFAULT;
+ 	}
++
+ 	/* Check and load cmnlib */
+ 	if (qseecom.qsee_version > QSEEE_VERSION_00) {
+ 		if (!(qseecom.commonlib_loaded ||
+@@ -3004,9 +2982,7 @@ static int qseecom_load_app(struct qseecom_dev_handle *data, void __user *argp)
+ 		strlcpy(data->client.app_name, load_img_req.img_name,
+ 					MAX_APP_NAME_SIZE);
+ 	load_img_req.app_id = app_id;
+-
+-	K_COPY_TO_USER(ret, argp, &load_img_req, sizeof(load_img_req));
+-	if(ret) {
++	if (copy_to_user(argp, &load_img_req, sizeof(load_img_req))) {
+ 		pr_err("copy_to_user failed\n");
+ 		ret = -EFAULT;
+ 		if (first_time) {
+@@ -3472,8 +3448,10 @@ static int qseecom_send_service_cmd(struct qseecom_dev_handle *data,
+ 	size_t req_buf_size;
+ 
+ 	/*struct qseecom_command_scm_resp resp;*/
+-	K_COPY_FROM_USER(ret, &req, argp, sizeof(req));
+-	if(ret) {
++
++	if (copy_from_user(&req,
++				(void __user *)argp,
++				sizeof(req))) {
+ 		pr_err("copy_from_user failed\n");
+ 		return -EFAULT;
+ 	}
+@@ -3871,7 +3849,7 @@ static int qseecom_send_cmd(struct qseecom_dev_handle *data, void __user *argp)
+ 	int ret = 0;
+ 	struct qseecom_send_cmd_req req;
+ 
+-	K_COPY_FROM_USER(ret, &req, argp, sizeof(req));
++	ret = copy_from_user(&req, argp, sizeof(req));
+ 	if (ret) {
+ 		pr_err("copy_from_user failed\n");
+ 		return ret;
+@@ -4368,7 +4346,7 @@ static int __qseecom_send_modfd_cmd(struct qseecom_dev_handle *data,
+ 	phys_addr_t pa;
+ 	u8 *va = NULL;
+ 
+-	K_COPY_FROM_USER(ret, &req, argp, sizeof(req));
++	ret = copy_from_user(&req, argp, sizeof(req));
+ 	if (ret) {
+ 		pr_err("copy_from_user failed\n");
+ 		return ret;
+@@ -5536,10 +5514,8 @@ static int __qseecom_send_modfd_resp(struct qseecom_dev_handle *data,
+ {
+ 	struct qseecom_send_modfd_listener_resp resp;
+ 	struct qseecom_registered_listener_list *this_lstnr = NULL;
+-	int err = 0;
+ 
+-	K_COPY_FROM_USER(err, &resp, argp, sizeof(resp));
+-	if(err) {
++	if (copy_from_user(&resp, argp, sizeof(resp))) {
+ 		pr_err("copy_from_user failed\n");
+ 		return -EINVAL;
+ 	}
+@@ -5580,16 +5556,13 @@ static int qseecom_get_qseos_version(struct qseecom_dev_handle *data,
+ 						void __user *argp)
+ {
+ 	struct qseecom_qseos_version_req req;
+-	int err = 0;
+ 
+-	K_COPY_FROM_USER(err, &req, argp, sizeof(req));
+-	if(err) {
++	if (copy_from_user(&req, argp, sizeof(req))) {
+ 		pr_err("copy_from_user failed\n");
+ 		return -EINVAL;
+ 	}
+ 	req.qseos_version = qseecom.qseos_version;
+-	K_COPY_TO_USER(err, argp, &req, sizeof(req));
+-	if(err) {
++	if (copy_to_user(argp, &req, sizeof(req))) {
+ 		pr_err("copy_to_user failed\n");
+ 		return -EINVAL;
+ 	}
+@@ -5880,12 +5853,13 @@ static int qseecom_load_external_elf(struct qseecom_dev_handle *data,
+ 	void *va = NULL;
+ 
+ 	/* Copy the relevant information needed for loading the image */
+-	K_COPY_FROM_USER(ret, &load_img_req, argp,
+-						sizeof(struct qseecom_load_img_req));
+-	if(ret) {
++	if (copy_from_user(&load_img_req,
++				(void __user *)argp,
++				sizeof(struct qseecom_load_img_req))) {
+ 		pr_err("copy_from_user failed\n");
+ 		return -EFAULT;
+ 	}
++
+ 	/* Get the handle of the shared fd */
+ 	ret = qseecom_vaddr_map(load_img_req.ifd_data_fd, &pa, &va,
+ 					&sgt, &attach, &len, &dmabuf);
+@@ -6050,9 +6024,8 @@ static int qseecom_query_app_loaded(struct qseecom_dev_handle *data,
+ 	bool found_app = false;
+ 
+ 	/* Copy the relevant information needed for loading the image */
+-	K_COPY_FROM_USER(ret, &query_req, argp,
+-				sizeof(struct qseecom_qseos_app_load_query));
+-	if(ret) {
++	if (copy_from_user(&query_req, (void __user *)argp,
++				sizeof(struct qseecom_qseos_app_load_query))) {
+ 		pr_err("copy_from_user failed\n");
+ 		ret = -EFAULT;
+ 		goto exit_free;
+@@ -6129,8 +6102,7 @@ static int qseecom_query_app_loaded(struct qseecom_dev_handle *data,
+ 			spin_unlock_irqrestore(
+ 				&qseecom.registered_app_list_lock, flags);
+ 		}
+-		K_COPY_TO_USER(ret, argp, &query_req, sizeof(query_req));
+-		if(ret) {
++		if (copy_to_user(argp, &query_req, sizeof(query_req))) {
+ 			pr_err("copy_to_user failed\n");
+ 			ret = -EFAULT;
+ 			goto exit_free;
+@@ -6536,11 +6508,12 @@ static int qseecom_create_key(struct qseecom_dev_handle *data,
+ 	struct qseecom_key_select_ireq set_key_ireq;
+ 	uint32_t entries = 0;
+ 
+-	K_COPY_FROM_USER(ret, &create_key_req, argp, sizeof(create_key_req));
+-	if(ret) {
++	ret = copy_from_user(&create_key_req, argp, sizeof(create_key_req));
++	if (ret) {
+ 		pr_err("copy_from_user failed\n");
+ 		return ret;
+ 	}
++
+ 	if (create_key_req.usage < QSEOS_KM_USAGE_DISK_ENCRYPTION ||
+ 		create_key_req.usage >= QSEOS_KM_USAGE_MAX) {
+ 		pr_err("unsupported usage %d\n", create_key_req.usage);
+@@ -6680,8 +6653,8 @@ static int qseecom_wipe_key(struct qseecom_dev_handle *data,
+ 	struct qseecom_key_select_ireq clear_key_ireq;
+ 	uint32_t entries = 0;
+ 
+-	K_COPY_FROM_USER(ret, &wipe_key_req, argp, sizeof(wipe_key_req));
+-	if(ret) {
++	ret = copy_from_user(&wipe_key_req, argp, sizeof(wipe_key_req));
++	if (ret) {
+ 		pr_err("copy_from_user failed\n");
+ 		return ret;
+ 	}
+@@ -6789,8 +6762,8 @@ static int qseecom_update_key_user_info(struct qseecom_dev_handle *data,
+ 	struct qseecom_update_key_userinfo_req update_key_req;
+ 	struct qseecom_key_userinfo_update_ireq ireq;
+ 
+-	K_COPY_FROM_USER(ret, &update_key_req, argp, sizeof(update_key_req));
+-	if(ret) {
++	ret = copy_from_user(&update_key_req, argp, sizeof(update_key_req));
++	if (ret) {
+ 		pr_err("copy_from_user failed\n");
+ 		return ret;
+ 	}
+@@ -6843,7 +6816,7 @@ static int qseecom_is_es_activated(void __user *argp)
+ {
+ 	struct qseecom_is_es_activated_req req = {0};
+ 	struct qseecom_command_scm_resp resp;
+-	int ret = 0;
++	int ret;
+ 
+ 	if (qseecom.qsee_version < QSEE_VERSION_04) {
+ 		pr_err("invalid qsee version\n");
+@@ -6863,8 +6836,8 @@ static int qseecom_is_es_activated(void __user *argp)
+ 	}
+ 
+ 	req.is_activated = resp.result;
+-	K_COPY_TO_USER(ret, argp, &req, sizeof(req));
+-	if(ret) {
++	ret = copy_to_user(argp, &req, sizeof(req));
++	if (ret) {
+ 		pr_err("copy_to_user failed\n");
+ 		return ret;
+ 	}
+@@ -6912,7 +6885,7 @@ static int qseecom_mdtp_cipher_dip(void __user *argp)
+ 	u32 tzbuflenin, tzbuflenout;
+ 	char *tzbufin = NULL, *tzbufout = NULL;
+ 	struct qseecom_scm_desc desc = {0};
+-	int ret = 0;
++	int ret;
+ 	phys_addr_t pain, paout;
+ 	struct qtee_shm shmin = {0}, shmout = {0};
+ 
+@@ -6924,7 +6897,7 @@ static int qseecom_mdtp_cipher_dip(void __user *argp)
+ 			break;
+ 		}
+ 
+-		K_COPY_FROM_USER(ret, &req, argp, sizeof(req));
++		ret = copy_from_user(&req, argp, sizeof(req));
+ 		if (ret) {
+ 			pr_err("copy_from_user failed, ret= %d\n", ret);
+ 			break;
+@@ -6948,9 +6921,10 @@ static int qseecom_mdtp_cipher_dip(void __user *argp)
+ 			break;
+ 		}
+ 
+-		K_COPY_FROM_USER(ret, tzbufin, (void __user *)req.in_buf, req.in_buf_size);
++		ret = copy_from_user(tzbufin, (void __user *)req.in_buf,
++					req.in_buf_size);
+ 		if (ret) {
+-			pr_err("copy_from_user failed, ret= %d\n", ret);
++			pr_err("copy_from_user failed, ret=%d\n", ret);
+ 			break;
+ 		}
+ 
+@@ -6991,7 +6965,8 @@ static int qseecom_mdtp_cipher_dip(void __user *argp)
+ 
+ 		/* Copy the output buffer from kernel space to userspace */
+ 		qtee_shmbridge_flush_shm_buf(&shmout);
+-		K_COPY_TO_USER(ret, (void __user *)req.out_buf, tzbufout, req.out_buf_size);
++		ret = copy_to_user((void __user *)req.out_buf,
++				tzbufout, req.out_buf_size);
+ 		if (ret) {
+ 			pr_err("copy_to_user failed, ret=%d\n", ret);
+ 			break;
+@@ -7424,8 +7399,9 @@ static int qseecom_qteec_open_session(struct qseecom_dev_handle *data,
+ 	struct qseecom_qteec_modfd_req req;
+ 	int ret = 0;
+ 
+-	K_COPY_FROM_USER(ret, &req, argp, sizeof(struct qseecom_qteec_modfd_req));
+-	if(ret) {
++	ret = copy_from_user(&req, argp,
++				sizeof(struct qseecom_qteec_modfd_req));
++	if (ret) {
+ 		pr_err("copy_from_user failed\n");
+ 		return ret;
+ 	}
+@@ -7441,8 +7417,8 @@ static int qseecom_qteec_close_session(struct qseecom_dev_handle *data,
+ 	struct qseecom_qteec_req req;
+ 	int ret = 0;
+ 
+-	K_COPY_FROM_USER(ret, &req, argp, sizeof(struct qseecom_qteec_req));
+-	if(ret) {
++	ret = copy_from_user(&req, argp, sizeof(struct qseecom_qteec_req));
++	if (ret) {
+ 		pr_err("copy_from_user failed\n");
+ 		return ret;
+ 	}
+@@ -7469,8 +7445,9 @@ static int qseecom_qteec_invoke_modfd_cmd(struct qseecom_dev_handle *data,
+ 	void *req_ptr = NULL;
+ 	void *resp_ptr = NULL;
+ 
+-	K_COPY_FROM_USER(ret, &req, argp, sizeof(struct qseecom_qteec_modfd_req));
+-	if(ret) {
++	ret = copy_from_user(&req, argp,
++			sizeof(struct qseecom_qteec_modfd_req));
++	if (ret) {
+ 		pr_err("copy_from_user failed\n");
+ 		return ret;
+ 	}
+@@ -7607,8 +7584,9 @@ static int qseecom_qteec_request_cancellation(struct qseecom_dev_handle *data,
+ 	struct qseecom_qteec_modfd_req req;
+ 	int ret = 0;
+ 
+-	K_COPY_FROM_USER(ret, &req, argp, sizeof(struct qseecom_qteec_modfd_req));
+-		if(ret) {
++	ret = copy_from_user(&req, argp,
++				sizeof(struct qseecom_qteec_modfd_req));
++	if (ret) {
+ 		pr_err("copy_from_user failed\n");
+ 		return ret;
+ 	}
+@@ -8331,8 +8309,8 @@ long qseecom_ioctl(struct file *file,
+ 	case QSEECOM_IOCTL_SET_ICE_INFO: {
+ 		struct qseecom_ice_data_t ice_data;
+ 
+-		K_COPY_FROM_USER(ret, &ice_data, argp, sizeof(ice_data));
+-		if(ret) {
++		ret = copy_from_user(&ice_data, argp, sizeof(ice_data));
++		if (ret) {
+ 			pr_err("copy_from_user failed\n");
+ 			return -EFAULT;
+ 		}
+@@ -8459,9 +8437,6 @@ static int qseecom_release(struct inode *inode, struct file *file)
+ static const struct file_operations qseecom_fops = {
+ 	.owner = THIS_MODULE,
+ 	.unlocked_ioctl = qseecom_ioctl,
+-#ifdef CONFIG_COMPAT
+-	.compat_ioctl = qseecom_ioctl_32bit,
+-#endif
+ 	.open = qseecom_open,
+ 	.release = qseecom_release
+ };
+@@ -8976,11 +8951,13 @@ static int qseecom_get_ce_info(struct qseecom_dev_handle *data,
+ 	bool found = false;
+ 	struct qseecom_ce_pipe_entry *pce_entry;
+ 
+-	K_COPY_FROM_USER(ret, pinfo, argp, sizeof(struct qseecom_ce_info_req));
+-	if(ret) {
++	ret = copy_from_user(pinfo, argp,
++				sizeof(struct qseecom_ce_info_req));
++	if (ret) {
+ 		pr_err("copy_from_user failed\n");
+ 		return ret;
+ 	}
++
+ 	switch (pinfo->usage) {
+ 	case QSEOS_KM_USAGE_DISK_ENCRYPTION:
+ 	case QSEOS_KM_USAGE_UFS_ICE_DISK_ENCRYPTION:
+@@ -9041,8 +9018,7 @@ static int qseecom_get_ce_info(struct qseecom_dev_handle *data,
+ 	for (; i < MAX_CE_PIPE_PAIR_PER_UNIT; i++)
+ 		pinfo->ce_pipe_entry[i].valid = 0;
+ 
+-	K_COPY_TO_USER(ret, argp, pinfo, sizeof(struct qseecom_ce_info_req));
+-	if(ret) {
++	if (copy_to_user(argp, pinfo, sizeof(struct qseecom_ce_info_req))) {
+ 		pr_err("copy_to_user failed\n");
+ 		ret = -EFAULT;
+ 	}
+@@ -9060,11 +9036,10 @@ static int qseecom_free_ce_info(struct qseecom_dev_handle *data,
+ 	int i;
+ 	bool found = false;
+ 
+-	K_COPY_FROM_USER(ret, pinfo, argp, sizeof(struct qseecom_ce_info_req));
+-	if(ret) {
+-		pr_err("copy_from_user failed\n");
++	ret = copy_from_user(pinfo, argp,
++				sizeof(struct qseecom_ce_info_req));
++	if (ret)
+ 		return ret;
+-	}
+ 
+ 	switch (pinfo->usage) {
+ 	case QSEOS_KM_USAGE_DISK_ENCRYPTION:
+@@ -9119,11 +9094,11 @@ static int qseecom_query_ce_info(struct qseecom_dev_handle *data,
+ 	bool found = false;
+ 	struct qseecom_ce_pipe_entry *pce_entry;
+ 
+-	K_COPY_FROM_USER(ret, pinfo, argp, sizeof(struct qseecom_ce_info_req));
+-	if(ret) {
+-		pr_err("copy_from_user failed\n");
++	ret = copy_from_user(pinfo, argp,
++				sizeof(struct qseecom_ce_info_req));
++	if (ret)
+ 		return ret;
+-	}
++
+ 	switch (pinfo->usage) {
+ 	case QSEOS_KM_USAGE_DISK_ENCRYPTION:
+ 	case QSEOS_KM_USAGE_UFS_ICE_DISK_ENCRYPTION:
+@@ -9181,8 +9156,7 @@ static int qseecom_query_ce_info(struct qseecom_dev_handle *data,
+ 	for (; i < MAX_CE_PIPE_PAIR_PER_UNIT; i++)
+ 		pinfo->ce_pipe_entry[i].valid = 0;
+ out:
+-	K_COPY_TO_USER(ret, argp, pinfo, sizeof(struct qseecom_ce_info_req));
+-	if(ret) {
++	if (copy_to_user(argp, pinfo, sizeof(struct qseecom_ce_info_req))) {
+ 		pr_err("copy_to_user failed\n");
+ 		ret = -EFAULT;
+ 	}
+diff --git a/qseecom/qseecom_32bit_impl.c b/qseecom/qseecom_32bit_impl.c
+deleted file mode 100644
+index 71d208f..0000000
+--- a/qseecom/qseecom_32bit_impl.c
++++ /dev/null
+@@ -1,943 +0,0 @@
+-// SPDX-License-Identifier: GPL-2.0-only
+-/*
+- * Copyright (c) 2014-2018, 2020, The Linux Foundation. All rights reserved.
+- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+- */
+-
+-#include <linux/debugfs.h>
+-#include <linux/uaccess.h>
+-#include <linux/qseecom.h>
+-#include <linux/compat.h>
+-#include <linux/mman.h>
+-#include <linux/module.h>
+-#include <linux/device.h>
+-#include <linux/types.h>
+-#include <linux/platform_device.h>
+-#include <linux/dma-mapping.h>
+-#include <linux/kernel.h>
+-#include <linux/dmapool.h>
+-#include <linux/interrupt.h>
+-#include <linux/spinlock.h>
+-#include <linux/init.h>
+-#include <linux/module.h>
+-#include <linux/fs.h>
+-#include <linux/scatterlist.h>
+-#include <linux/interconnect.h>
+-#include <linux/delay.h>
+-#include "qseecom_32bit_impl.h"
+-
+-
+-static int get_qseecom_register_listener_req_32bit(
+-		struct qseecom_register_listener_req_32bit __user *data32,
+-		struct qseecom_register_listener_req *data)
+-{
+-	int err;
+-	compat_ulong_t listener_id;
+-	compat_long_t ifd_data_fd;
+-	compat_uptr_t virt_sb_base;
+-	compat_ulong_t sb_size;
+-
+-	err = get_user(listener_id, &data32->listener_id);
+-	memcpy( &data->listener_id, &listener_id, sizeof(listener_id));
+-	err |= get_user(ifd_data_fd, &data32->ifd_data_fd);
+-	memcpy( &data->ifd_data_fd, &ifd_data_fd, sizeof(ifd_data_fd));
+-	err |= get_user(virt_sb_base, &data32->virt_sb_base);
+-	data->virt_sb_base = NULL;
+-	memcpy(&data->virt_sb_base, &virt_sb_base, sizeof(virt_sb_base));
+-	err |= get_user(sb_size, &data32->sb_size);
+-	memcpy( &data->sb_size, &sb_size, sizeof(sb_size));
+-	return err;
+-}
+-
+-static int get_qseecom_load_img_req_32bit(
+-		struct qseecom_load_img_req_32bit __user *data32,
+-		struct qseecom_load_img_req *data)
+-{
+-	int err;
+-	compat_ulong_t mdt_len;
+-	compat_ulong_t img_len;
+-	compat_long_t ifd_data_fd;
+-	compat_ulong_t app_arch;
+-	compat_uint_t app_id;
+-	char img_name;
+-	unsigned int i;
+-
+-	err = get_user(mdt_len, &data32->mdt_len);
+-	memcpy( &data->mdt_len, &mdt_len, sizeof(mdt_len));
+-	err |= get_user(img_len, &data32->img_len);
+-	memcpy( &data->img_len, &img_len, sizeof(img_len));
+-	err |= get_user(ifd_data_fd, &data32->ifd_data_fd);
+-	memcpy( &data->ifd_data_fd, &ifd_data_fd, sizeof(ifd_data_fd));
+-	for (i = 0; i < MAX_APP_NAME_SIZE; i++) {
+-		err |= get_user(img_name, &(data32->img_name[i]));
+-		memcpy( &data->img_name[i], &img_name, sizeof(img_name));
+-	}
+-	err |= get_user(app_arch, &data32->app_arch);
+-	memcpy( &data->app_arch, &app_arch, sizeof(app_arch));
+-	err |= get_user(app_id, &data32->app_id);
+-	memcpy( &data->app_id, &app_id, sizeof(app_id));
+-	return err;
+-}
+-
+-static int get_qseecom_send_cmd_req_32bit(
+-		struct qseecom_send_cmd_req_32bit __user *data32,
+-		struct qseecom_send_cmd_req *data)
+-{
+-	int err;
+-	compat_uptr_t cmd_req_buf;
+-	compat_uint_t cmd_req_len;
+-	compat_uptr_t resp_buf;
+-	compat_uint_t resp_len;
+-
+-	err = get_user(cmd_req_buf, &data32->cmd_req_buf);
+-	data->cmd_req_buf = NULL;
+-	memcpy( &data->cmd_req_buf, &cmd_req_buf, sizeof(cmd_req_buf));
+-	err |= get_user(cmd_req_len, &data32->cmd_req_len);
+-	memcpy( &data->cmd_req_len, &cmd_req_len, sizeof(cmd_req_len));
+-	err |= get_user(resp_buf, &data32->resp_buf);
+-	data->resp_buf = NULL;
+-	memcpy( &data->resp_buf, &resp_buf, sizeof(resp_buf));
+-	err |= get_user(resp_len, &data32->resp_len);
+-	memcpy( &data->resp_len, &resp_len, sizeof(resp_len));
+-	return err;
+-}
+-
+-static int get_qseecom_send_modfd_cmd_req_32bit(
+-		struct qseecom_send_modfd_cmd_req_32bit __user *data32,
+-		struct qseecom_send_modfd_cmd_req *data)
+-{
+-	int err;
+-	unsigned int i;
+-	compat_uptr_t cmd_req_buf;
+-	compat_uint_t cmd_req_len;
+-	compat_uptr_t resp_buf;
+-	compat_uint_t resp_len;
+-	compat_long_t fd;
+-	compat_ulong_t cmd_buf_offset;
+-
+-	err = get_user(cmd_req_buf, &data32->cmd_req_buf);
+-	data->cmd_req_buf = NULL;
+-	memcpy( &data->cmd_req_buf, &cmd_req_buf, sizeof(cmd_req_buf));
+-	err |= get_user(cmd_req_len, &data32->cmd_req_len);
+-	memcpy(&data->cmd_req_len, &cmd_req_len, sizeof(cmd_req_len));
+-	err |= get_user(resp_buf, &data32->resp_buf);
+-	data->resp_buf = NULL;
+-	memcpy(&data->resp_buf, &resp_buf, sizeof(resp_buf));
+-	err |= get_user(resp_len, &data32->resp_len);
+-	memcpy( &data->resp_len, &resp_len, sizeof(resp_len));
+-	for (i = 0; i < MAX_ION_FD; i++) {
+-		err |= get_user(fd, &data32->ifd_data[i].fd);
+-		memcpy(&data->ifd_data[i].fd, &fd, sizeof(fd));
+-		err |= get_user(cmd_buf_offset,
+-				&data32->ifd_data[i].cmd_buf_offset);
+-		memcpy(&data->ifd_data[i].cmd_buf_offset, &cmd_buf_offset, sizeof(cmd_buf_offset));
+-	}
+-	return err;
+-}
+-
+-static int get_qseecom_set_sb_mem_param_req_32bit(
+-		struct qseecom_set_sb_mem_param_req_32bit __user *data32,
+-		struct qseecom_set_sb_mem_param_req *data)
+-{
+-	int err;
+-	compat_long_t ifd_data_fd;
+-	compat_uptr_t virt_sb_base;
+-	compat_ulong_t sb_len;
+-
+-	err = get_user(ifd_data_fd, &data32->ifd_data_fd);
+-	memcpy(&data->ifd_data_fd, &ifd_data_fd, sizeof(ifd_data_fd));
+-	err |= get_user(virt_sb_base, &data32->virt_sb_base);
+-	data->virt_sb_base = NULL;
+-	memcpy(&data->virt_sb_base, &virt_sb_base, sizeof(virt_sb_base));
+-	err |= get_user(sb_len, &data32->sb_len);
+-	memcpy(&data->sb_len, &sb_len, sizeof(sb_len));
+-	return err;
+-}
+-
+-static int get_qseecom_qseos_version_req_32bit(
+-		struct qseecom_qseos_version_req_32bit __user *data32,
+-		struct qseecom_qseos_version_req *data)
+-{
+-	int err;
+-	compat_uint_t qseos_version;
+-
+-	err = get_user(qseos_version, &data32->qseos_version);
+-	memcpy( &data->qseos_version, &qseos_version, sizeof(qseos_version));
+-	return err;
+-}
+-
+-static int get_qseecom_qseos_app_load_query_32bit(
+-		struct qseecom_qseos_app_load_query_32bit __user *data32,
+-		struct qseecom_qseos_app_load_query *data)
+-{
+-	int err = 0;
+-	unsigned int i;
+-	compat_uint_t app_id;
+-	char app_name;
+-	compat_ulong_t app_arch;
+-
+-	for (i = 0; i < MAX_APP_NAME_SIZE; i++) {
+-		err |= get_user(app_name, &(data32->app_name[i]));
+-		memcpy(&data->app_name[i], &app_name, sizeof(app_name));
+-	}
+-	err |= get_user(app_id, &data32->app_id);
+-	memcpy(&data->app_id, &app_id, sizeof(app_id));
+-	err |= get_user(app_arch, &data32->app_arch);
+-	memcpy(&data->app_arch, &app_arch, sizeof(app_arch));
+-	return err;
+-}
+-
+-static int get_qseecom_send_svc_cmd_req_32bit(
+-		struct qseecom_send_svc_cmd_req_32bit __user *data32,
+-		struct qseecom_send_svc_cmd_req *data)
+-{
+-	int err;
+-	compat_ulong_t cmd_id;
+-	compat_uptr_t cmd_req_buf;
+-	compat_uint_t cmd_req_len;
+-	compat_uptr_t resp_buf;
+-	compat_uint_t resp_len;
+-
+-	err = get_user(cmd_id, &data32->cmd_id);
+-	memcpy(&data->cmd_id, &cmd_id, sizeof(cmd_id));
+-	err |= get_user(cmd_req_buf, &data32->cmd_req_buf);
+-	data->cmd_req_buf = NULL;
+-	memcpy(&data->cmd_req_buf, &cmd_req_buf, sizeof(cmd_req_buf));
+-	err |= get_user(cmd_req_len, &data32->cmd_req_len);
+-	memcpy(&data->cmd_req_len, &cmd_req_len, sizeof(cmd_req_len));
+-	err |= get_user(resp_buf, &data32->resp_buf);
+-	data->resp_buf = NULL;
+-	memcpy(&data->resp_buf, &resp_buf, sizeof(resp_buf));
+-	err |= get_user(resp_len, &data32->resp_len);
+-	memcpy(&data->resp_len, &resp_len, sizeof(resp_len));
+-	return err;
+-}
+-
+-static int get_qseecom_create_key_req_32bit(
+-		struct qseecom_create_key_req_32bit __user *data32,
+-		struct qseecom_create_key_req *data)
+-{
+-	int err = 0;
+-	compat_uint_t usage;
+-	unsigned char hash32;
+-	unsigned int i;
+-
+-	for (i = 0; i < QSEECOM_HASH_SIZE; i++) {
+-		err |= get_user(hash32, &(data32->hash32[i]));
+-		memcpy( &data->hash32[i], &hash32, sizeof(hash32));
+-	}
+-	err = get_user(usage, &data32->usage);
+-	memcpy(&data->usage, &usage, sizeof(usage));
+-
+-	return err;
+-}
+-
+-static int get_qseecom_wipe_key_req_32bit(
+-		struct qseecom_wipe_key_req_32bit __user *data32,
+-		struct qseecom_wipe_key_req *data)
+-{
+-	int err;
+-	compat_uint_t usage;
+-	compat_int_t wipe_key_flag;
+-
+-	err = get_user(usage, &data32->usage);
+-	memcpy(&data->usage, &usage, sizeof(usage));
+-	err |= get_user(wipe_key_flag, &data32->wipe_key_flag);
+-	memcpy(&data->wipe_key_flag, &wipe_key_flag, sizeof(wipe_key_flag));
+-
+-	return err;
+-}
+-
+-static int get_qseecom_update_key_userinfo_req_32bit(
+-		struct qseecom_update_key_userinfo_req_32bit __user *data32,
+-		struct qseecom_update_key_userinfo_req *data)
+-{
+-	int err = 0;
+-	compat_uint_t usage;
+-	unsigned char current_hash32;
+-	unsigned char new_hash32;
+-	unsigned int i;
+-
+-	for (i = 0; i < QSEECOM_HASH_SIZE; i++) {
+-		err |= get_user(current_hash32, &(data32->current_hash32[i]));
+-		memcpy( &data->current_hash32[i], &current_hash32, sizeof(current_hash32));
+-	}
+-	for (i = 0; i < QSEECOM_HASH_SIZE; i++) {
+-		err |= get_user(new_hash32, &(data32->new_hash32[i]));
+-		memcpy( &data->new_hash32[i], &new_hash32, sizeof(new_hash32));
+-	}
+-	err = get_user(usage, &data32->usage);
+-	memcpy(&data->usage, &usage, sizeof(usage));
+-
+-	return err;
+-}
+-
+-static int get_qseecom_save_partition_hash_req_32bit(
+-		struct qseecom_save_partition_hash_req_32bit __user *data32,
+-		struct qseecom_save_partition_hash_req *data)
+-{
+-	int err;
+-	compat_int_t partition_id;
+-	char digest;
+-	unsigned int i;
+-
+-	err = get_user(partition_id, &data32->partition_id);
+-	memcpy(&data->partition_id, &partition_id, sizeof(partition_id));
+-	for (i = 0; i < SHA256_DIGEST_LENGTH; i++) {
+-		err |= get_user(digest, &(data32->digest[i]));
+-		memcpy( &data->digest[i], &digest, sizeof(digest));
+-	}
+-	return err;
+-}
+-
+-static int get_qseecom_is_es_activated_req_32bit(
+-		struct qseecom_is_es_activated_req_32bit __user *data32,
+-		struct qseecom_is_es_activated_req *data)
+-{
+-	compat_int_t is_activated;
+-	int err;
+-
+-	err = get_user(is_activated, &data32->is_activated);
+-	memcpy(&data->is_activated, &is_activated, sizeof(is_activated));
+-	return err;
+-}
+-
+-static int get_qseecom_mdtp_cipher_dip_req_32bit(
+-		struct qseecom_mdtp_cipher_dip_req_32bit __user *data32,
+-		struct qseecom_mdtp_cipher_dip_req *data)
+-{
+-	int err;
+-	compat_int_t in_buf_size;
+-	compat_uptr_t in_buf;
+-	compat_int_t out_buf_size;
+-	compat_uptr_t out_buf;
+-	compat_int_t direction;
+-
+-	err = get_user(in_buf_size, &data32->in_buf_size);
+-	memcpy(&data->in_buf_size, &in_buf_size, sizeof(in_buf_size));
+-	err |= get_user(out_buf_size, &data32->out_buf_size);
+-	memcpy(&data->out_buf_size, &out_buf_size, sizeof(out_buf_size));
+-	err |= get_user(direction, &data32->direction);
+-	memcpy(&data->direction, &direction, sizeof(direction));
+-	err |= get_user(in_buf, &data32->in_buf);
+-	data->in_buf = NULL;
+-	memcpy(&data->in_buf, &in_buf, sizeof(in_buf));
+-	err |= get_user(out_buf, &data32->out_buf);
+-	data->out_buf = NULL;
+-	memcpy(&data->out_buf, &out_buf, sizeof(out_buf));
+-
+-	return err;
+-}
+-
+-static int get_qseecom_send_modfd_listener_resp_32bit(
+-		struct qseecom_send_modfd_listener_resp_32bit __user *data32,
+-		struct qseecom_send_modfd_listener_resp *data)
+-{
+-	int err;
+-	unsigned int i;
+-	compat_uptr_t resp_buf_ptr;
+-	compat_uint_t resp_len;
+-	compat_long_t fd;
+-	compat_ulong_t cmd_buf_offset;
+-
+-	err = get_user(resp_buf_ptr, &data32->resp_buf_ptr);
+-	data->resp_buf_ptr = NULL;
+-	memcpy(&data->resp_buf_ptr, &resp_buf_ptr, sizeof(resp_buf_ptr));
+-	err |= get_user(resp_len, &data32->resp_len);
+-	memcpy(&data->resp_len, &resp_len, sizeof(resp_len));
+-	for (i = 0; i < MAX_ION_FD; i++) {
+-		err |= get_user(fd, &data32->ifd_data[i].fd);
+-		memcpy(&data->ifd_data[i].fd, &fd, sizeof(fd));
+-		err |= get_user(cmd_buf_offset,
+-				&data32->ifd_data[i].cmd_buf_offset);
+-		memcpy(&data->ifd_data[i].cmd_buf_offset, &cmd_buf_offset, sizeof(cmd_buf_offset));
+-	}
+-	return err;
+-}
+-
+-
+-static int get_qseecom_qteec_req_32bit(
+-		struct qseecom_qteec_req_32bit __user *data32,
+-		struct qseecom_qteec_req *data)
+-{
+-	compat_uptr_t req_ptr;
+-	compat_ulong_t req_len;
+-	compat_uptr_t resp_ptr;
+-	compat_ulong_t resp_len;
+-	int err;
+-
+-	err = get_user(req_ptr, &data32->req_ptr);
+-	data->req_ptr = NULL;
+-	memcpy(&data->req_ptr, &req_ptr, sizeof(req_ptr));
+-	err |= get_user(req_len, &data32->req_len);
+-	memcpy(&data->req_len, &req_len, sizeof(req_len));
+-	err |= get_user(resp_ptr, &data32->resp_ptr);
+-	data->resp_ptr = NULL;
+-	memcpy(&data->resp_ptr, &resp_ptr, sizeof(resp_ptr));
+-	err |= get_user(resp_len, &data32->resp_len);
+-	memcpy(&data->resp_len, &resp_len, sizeof(resp_len));
+-	return err;
+-}
+-
+-static int get_qseecom_qteec_modfd_req_32bit(
+-		struct qseecom_qteec_modfd_req_32bit __user *data32,
+-		struct qseecom_qteec_modfd_req *data)
+-{
+-	compat_uptr_t req_ptr;
+-	compat_ulong_t req_len;
+-	compat_uptr_t resp_ptr;
+-	compat_ulong_t resp_len;
+-	compat_long_t fd;
+-	compat_ulong_t cmd_buf_offset;
+-	int err, i;
+-
+-	err = get_user(req_ptr, &data32->req_ptr);
+-	data->req_ptr = NULL;
+-	memcpy(&data->req_ptr, &req_ptr, sizeof(req_ptr));
+-	err |= get_user(req_len, &data32->req_len);
+-	memcpy(&data->req_len, &req_len, sizeof(req_len));
+-
+-	err |= get_user(resp_ptr, &data32->resp_ptr);
+-	data->resp_ptr = NULL;
+-	memcpy(&data->resp_ptr, &resp_ptr, sizeof(resp_ptr));
+-	err |= get_user(resp_len, &data32->resp_len);
+-	memcpy(&data->resp_len, &resp_len, sizeof(resp_len));
+-
+-	for (i = 0; i < MAX_ION_FD; i++) {
+-		err |= get_user(fd, &data32->ifd_data[i].fd);
+-		memcpy(&data->ifd_data[i].fd, &fd, sizeof(fd));
+-		err |= get_user(cmd_buf_offset,
+-				&data32->ifd_data[i].cmd_buf_offset);
+-		memcpy(&data->ifd_data[i].cmd_buf_offset, &cmd_buf_offset, sizeof(cmd_buf_offset));
+-	}
+-	return err;
+-}
+-
+-static int get_int_32bit(compat_int_t __user *data32,
+-		int *data)
+-{
+-	compat_int_t x;
+-	int err;
+-
+-	err = get_user(x, data32);
+-	memcpy(&data, &x, sizeof(x));
+-	return err;
+-}
+-
+-static int put_qseecom_load_img_req_32bit(
+-		struct qseecom_load_img_req_32bit __user *data32,
+-		struct qseecom_load_img_req *data)
+-{
+-	int err;
+-	compat_ulong_t mdt_len;
+-	compat_ulong_t img_len;
+-	compat_long_t ifd_data_fd;
+-	compat_ulong_t app_arch;
+-	compat_int_t app_id;
+-	char img_name;
+-	unsigned int i;
+-
+-	memcpy(&mdt_len, &data->mdt_len, sizeof(mdt_len));
+-	err = put_user(mdt_len, &data32->mdt_len);
+-	memcpy(&img_len, &data->img_len, sizeof(img_len));
+-	err |= put_user(img_len, &data32->img_len);
+-	memcpy(&ifd_data_fd, &data->ifd_data_fd, sizeof(ifd_data_fd));
+-	err |= put_user(ifd_data_fd, &data32->ifd_data_fd);
+-	for (i = 0; i < MAX_APP_NAME_SIZE; i++) {
+-		memcpy(&img_name, &data->img_name[i], sizeof(img_name));
+-		err |= put_user(img_name, &data32->img_name[i]);
+-	}
+-	memcpy(&app_arch, &data->app_arch, sizeof(app_arch));
+-	err |= put_user(app_arch, &data32->app_arch);
+-	memcpy(&app_id, &data->app_id, sizeof(app_id));
+-	err |= put_user(app_id, &data32->app_id);
+-	return err;
+-}
+-
+-static int put_qseecom_qseos_version_req_32bit(
+-		struct qseecom_qseos_version_req_32bit __user *data32,
+-		struct qseecom_qseos_version_req *data)
+-{
+-	compat_uint_t qseos_version;
+-	int err;
+-	memcpy(&qseos_version, &data->qseos_version, sizeof(qseos_version));
+-	err = put_user(qseos_version, &data32->qseos_version);
+-	return err;
+-}
+-
+-static int put_qseecom_qseos_app_load_query_32bit(
+-		struct qseecom_qseos_app_load_query_32bit __user *data32,
+-		struct qseecom_qseos_app_load_query *data)
+-{
+-	int err = 0;
+-	unsigned int i;
+-	compat_int_t app_id;
+-	compat_ulong_t app_arch;
+-	char app_name;
+-
+-	for (i = 0; i < MAX_APP_NAME_SIZE; i++) {
+-		memcpy(&app_name, &data->app_name[i], sizeof(app_name));
+-		err |= put_user(app_name, &(data32->app_name[i]));
+-	}
+-	memcpy(&app_id, &data->app_id, sizeof(app_id));
+-	err |= put_user(app_id, &data32->app_id);
+-	memcpy(&app_arch, &data->app_arch, sizeof(app_arch));
+-	err |= put_user(app_arch, &data32->app_arch);
+-
+-	return err;
+-}
+-
+-static int put_qseecom_is_es_activated_req_32bit(
+-		struct qseecom_is_es_activated_req_32bit __user *data32,
+-		struct qseecom_is_es_activated_req *data)
+-{
+-	compat_int_t is_activated;
+-	int err;
+-
+-	memcpy(&is_activated, &data->is_activated, sizeof(is_activated));
+-	err = put_user(is_activated, &data32->is_activated);
+-	return err;
+-}
+-
+-static unsigned int convert_cmd(unsigned int cmd)
+-{
+-	switch (cmd) {
+-	case QSEECOM_IOCTL_REGISTER_LISTENER_REQ_32BIT:
+-		return QSEECOM_IOCTL_REGISTER_LISTENER_REQ;
+-	case QSEECOM_IOCTL_UNREGISTER_LISTENER_REQ_32BIT:
+-		return QSEECOM_IOCTL_UNREGISTER_LISTENER_REQ;
+-	case QSEECOM_IOCTL_LOAD_APP_REQ_32BIT:
+-		return QSEECOM_IOCTL_LOAD_APP_REQ;
+-	case QSEECOM_IOCTL_RECEIVE_REQ_32BIT:
+-		return QSEECOM_IOCTL_RECEIVE_REQ;
+-	case QSEECOM_IOCTL_SEND_RESP_REQ_32BIT:
+-		return QSEECOM_IOCTL_SEND_RESP_REQ;
+-	case QSEECOM_IOCTL_UNLOAD_APP_REQ_32BIT:
+-		return QSEECOM_IOCTL_UNLOAD_APP_REQ;
+-	case QSEECOM_IOCTL_PERF_ENABLE_REQ_32BIT:
+-		return QSEECOM_IOCTL_PERF_ENABLE_REQ;
+-	case QSEECOM_IOCTL_PERF_DISABLE_REQ_32BIT:
+-		return QSEECOM_IOCTL_PERF_DISABLE_REQ;
+-	case QSEECOM_IOCTL_UNLOAD_EXTERNAL_ELF_REQ_32BIT:
+-		return QSEECOM_IOCTL_UNLOAD_EXTERNAL_ELF_REQ;
+-	case QSEECOM_IOCTL_SET_BUS_SCALING_REQ_32BIT:
+-		return QSEECOM_IOCTL_SET_BUS_SCALING_REQ;
+-	case QSEECOM_IOCTL_SEND_CMD_REQ_32BIT:
+-		return QSEECOM_IOCTL_SEND_CMD_REQ;
+-	case QSEECOM_IOCTL_SEND_MODFD_CMD_REQ_32BIT:
+-		return QSEECOM_IOCTL_SEND_MODFD_CMD_REQ;
+-	case QSEECOM_IOCTL_SET_MEM_PARAM_REQ_32BIT:
+-		return QSEECOM_IOCTL_SET_MEM_PARAM_REQ;
+-	case QSEECOM_IOCTL_GET_QSEOS_VERSION_REQ_32BIT:
+-		return QSEECOM_IOCTL_GET_QSEOS_VERSION_REQ;
+-	case QSEECOM_IOCTL_LOAD_EXTERNAL_ELF_REQ_32BIT:
+-		return QSEECOM_IOCTL_LOAD_EXTERNAL_ELF_REQ;
+-	case QSEECOM_IOCTL_APP_LOADED_QUERY_REQ_32BIT:
+-		return QSEECOM_IOCTL_APP_LOADED_QUERY_REQ;
+-	case QSEECOM_IOCTL_SEND_CMD_SERVICE_REQ_32BIT:
+-		return QSEECOM_IOCTL_SEND_CMD_SERVICE_REQ;
+-	case QSEECOM_IOCTL_CREATE_KEY_REQ_32BIT:
+-		return QSEECOM_IOCTL_CREATE_KEY_REQ;
+-	case QSEECOM_IOCTL_WIPE_KEY_REQ_32BIT:
+-		return QSEECOM_IOCTL_WIPE_KEY_REQ;
+-	case QSEECOM_IOCTL_UPDATE_KEY_USER_INFO_REQ_32BIT:
+-		return QSEECOM_IOCTL_UPDATE_KEY_USER_INFO_REQ;
+-	case QSEECOM_IOCTL_SAVE_PARTITION_HASH_REQ_32BIT:
+-		return QSEECOM_IOCTL_SAVE_PARTITION_HASH_REQ;
+-	case QSEECOM_IOCTL_IS_ES_ACTIVATED_REQ_32BIT:
+-		return QSEECOM_IOCTL_IS_ES_ACTIVATED_REQ;
+-	case QSEECOM_IOCTL_SEND_MODFD_RESP_32BIT:
+-		return QSEECOM_IOCTL_SEND_MODFD_RESP;
+-	case QSEECOM_QTEEC_IOCTL_OPEN_SESSION_REQ_32BIT:
+-		return QSEECOM_QTEEC_IOCTL_OPEN_SESSION_REQ;
+-	case QSEECOM_QTEEC_IOCTL_CLOSE_SESSION_REQ_32BIT:
+-		return QSEECOM_QTEEC_IOCTL_CLOSE_SESSION_REQ;
+-	case QSEECOM_QTEEC_IOCTL_INVOKE_MODFD_CMD_REQ_32BIT:
+-		return QSEECOM_QTEEC_IOCTL_INVOKE_MODFD_CMD_REQ;
+-	case QSEECOM_QTEEC_IOCTL_REQUEST_CANCELLATION_REQ_32BIT:
+-		return QSEECOM_QTEEC_IOCTL_REQUEST_CANCELLATION_REQ;
+-	case QSEECOM_IOCTL_MDTP_CIPHER_DIP_REQ_32BIT:
+-		return QSEECOM_IOCTL_MDTP_CIPHER_DIP_REQ;
+-	case QSEECOM_IOCTL_SEND_MODFD_CMD_64_REQ_32BIT:
+-		return QSEECOM_IOCTL_SEND_MODFD_CMD_64_REQ;
+-	case QSEECOM_IOCTL_SEND_MODFD_RESP_64_32BIT:
+-		return QSEECOM_IOCTL_SEND_MODFD_RESP_64;
+-
+-	default:
+-		return cmd;
+-	}
+-}
+-
+-long qseecom_ioctl_32bit(struct file *file,
+-		unsigned int cmd, unsigned long arg)
+-{
+-	long ret;
+-	switch (cmd) {
+-
+-	case QSEECOM_IOCTL_UNREGISTER_LISTENER_REQ_32BIT:
+-	case QSEECOM_IOCTL_RECEIVE_REQ_32BIT:
+-	case QSEECOM_IOCTL_SEND_RESP_REQ_32BIT:
+-	case QSEECOM_IOCTL_UNLOAD_APP_REQ_32BIT:
+-	case QSEECOM_IOCTL_PERF_ENABLE_REQ_32BIT:
+-	case QSEECOM_IOCTL_PERF_DISABLE_REQ_32BIT:
+-	case QSEECOM_IOCTL_UNLOAD_EXTERNAL_ELF_REQ_32BIT: {
+-		return qseecom_ioctl(file, convert_cmd(cmd), 0);
+-	}
+-	break;
+-	case QSEECOM_IOCTL_REGISTER_LISTENER_REQ_32BIT: {
+-		struct qseecom_register_listener_req_32bit __user *data32;
+-		struct qseecom_register_listener_req *data;
+-		int err;
+-		data32 = compat_ptr(arg);
+-		data = kmalloc(sizeof(*data), GFP_KERNEL);
+-		if (data == NULL)
+-			return -EFAULT;
+-
+-		err = get_qseecom_register_listener_req_32bit(data32, data);
+-		if (err)
+-			return err;
+-
+-		return qseecom_ioctl(file, convert_cmd(cmd),
+-						(unsigned long)data);
+-	}
+-	break;
+-	case QSEECOM_IOCTL_LOAD_APP_REQ_32BIT: {
+-		struct qseecom_load_img_req_32bit __user *data32;
+-		struct qseecom_load_img_req *data;
+-		int err;
+-
+-		data32 = compat_ptr(arg);
+-		data = kmalloc(sizeof(*data), GFP_KERNEL);
+-		if (data == NULL)
+-			return -EFAULT;
+-		err = get_qseecom_load_img_req_32bit(data32, data);
+-		if (err)
+-			return err;
+-
+-		ret = qseecom_ioctl(file, convert_cmd(cmd),
+-						(unsigned long)data);
+-		err = put_qseecom_load_img_req_32bit(data32, data);
+-		return ret ? ret : err;
+-	}
+-	break;
+-	case QSEECOM_IOCTL_SEND_CMD_REQ_32BIT: {
+-		struct qseecom_send_cmd_req_32bit __user *data32;
+-		struct qseecom_send_cmd_req *data;
+-		int err;
+-
+-		data32 = compat_ptr(arg);
+-		data = kmalloc(sizeof(*data), GFP_KERNEL);
+-		if (data == NULL)
+-			return -EFAULT;
+-
+-		err = get_qseecom_send_cmd_req_32bit(data32, data);
+-		if (err)
+-			return err;
+-
+-		return qseecom_ioctl(file, convert_cmd(cmd),
+-						(unsigned long)data);
+-	}
+-	break;
+-	case QSEECOM_IOCTL_SEND_MODFD_CMD_REQ_32BIT:
+-	case QSEECOM_IOCTL_SEND_MODFD_CMD_64_REQ_32BIT: {
+-		struct qseecom_send_modfd_cmd_req_32bit __user *data32;
+-		struct qseecom_send_modfd_cmd_req *data;
+-		int err;
+-
+-		data32 = compat_ptr(arg);
+-		data = kmalloc(sizeof(*data), GFP_KERNEL);
+-		if (data == NULL)
+-			return -EFAULT;
+-
+-		err = get_qseecom_send_modfd_cmd_req_32bit(data32, data);
+-		if (err)
+-			return err;
+-
+-		return qseecom_ioctl(file, convert_cmd(cmd),
+-						(unsigned long)data);
+-	}
+-	break;
+-	case QSEECOM_IOCTL_SET_MEM_PARAM_REQ_32BIT: {
+-		struct qseecom_set_sb_mem_param_req_32bit __user *data32;
+-		struct qseecom_set_sb_mem_param_req *data;
+-		int err;
+-
+-		data32 = compat_ptr(arg);
+-		data = kmalloc(sizeof(*data), GFP_KERNEL);
+-		if (data == NULL)
+-			return -EFAULT;
+-
+-		err = get_qseecom_set_sb_mem_param_req_32bit(data32, data);
+-		if (err)
+-			return err;
+-
+-		return qseecom_ioctl(file, convert_cmd(cmd),
+-						(unsigned long)data);
+-	}
+-	break;
+-	case QSEECOM_IOCTL_GET_QSEOS_VERSION_REQ_32BIT: {
+-		struct qseecom_qseos_version_req_32bit __user *data32;
+-		struct qseecom_qseos_version_req *data;
+-		int err;
+-
+-		data32 = compat_ptr(arg);
+-		data = kmalloc(sizeof(*data), GFP_KERNEL);
+-		if (data == NULL)
+-			return -EFAULT;
+-
+-		err = get_qseecom_qseos_version_req_32bit(data32, data);
+-		if (err)
+-			return err;
+-
+-		ret = qseecom_ioctl(file, convert_cmd(cmd),
+-						(unsigned long)data);
+-		err = put_qseecom_qseos_version_req_32bit(data32, data);
+-
+-		return ret ? ret : err;
+-	}
+-	break;
+-	case QSEECOM_IOCTL_SET_BUS_SCALING_REQ_32BIT: {
+-		compat_int_t __user *data32;
+-		int *data;
+-		int err;
+-
+-		data32 = compat_ptr(arg);
+-		data = kmalloc(sizeof(*data), GFP_KERNEL);
+-		if (data == NULL)
+-			return -EFAULT;
+-		err = get_int_32bit(data32, data);
+-		if (err)
+-			return err;
+-		return qseecom_ioctl(file, convert_cmd(cmd),
+-						(unsigned long)data);
+-	}
+-	break;
+-	case QSEECOM_IOCTL_LOAD_EXTERNAL_ELF_REQ_32BIT: {
+-		struct qseecom_load_img_req_32bit __user *data32;
+-		struct qseecom_load_img_req *data;
+-		int err;
+-
+-		data32 = compat_ptr(arg);
+-		data = kmalloc(sizeof(*data), GFP_KERNEL);
+-		if (data == NULL)
+-			return -EFAULT;
+-
+-		err = get_qseecom_load_img_req_32bit(data32, data);
+-		if (err)
+-			return err;
+-
+-		return qseecom_ioctl(file, convert_cmd(cmd),
+-						(unsigned long)data);
+-	}
+-	break;
+-	case QSEECOM_IOCTL_APP_LOADED_QUERY_REQ_32BIT: {
+-		struct qseecom_qseos_app_load_query_32bit __user *data32;
+-		struct qseecom_qseos_app_load_query *data;
+-		int err;
+-
+-		data32 = compat_ptr(arg);
+-		data = kmalloc(sizeof(*data), GFP_KERNEL);
+-		if (data == NULL)
+-			return -EFAULT;
+-
+-		err = get_qseecom_qseos_app_load_query_32bit(data32, data);
+-		if (err)
+-			return err;
+-
+-		ret = qseecom_ioctl(file, convert_cmd(cmd),
+-					(unsigned long)data);
+-		err = put_qseecom_qseos_app_load_query_32bit(data32, data);
+-		return ret ? ret : err;
+-	}
+-	break;
+-	case QSEECOM_IOCTL_SEND_CMD_SERVICE_REQ_32BIT: {
+-		struct qseecom_send_svc_cmd_req_32bit __user *data32;
+-		struct qseecom_send_svc_cmd_req *data;
+-		int err;
+-
+-		data32 = compat_ptr(arg);
+-		data = kmalloc(sizeof(*data), GFP_KERNEL);
+-		if (data == NULL)
+-			return -EFAULT;
+-
+-		err = get_qseecom_send_svc_cmd_req_32bit(data32, data);
+-		if (err)
+-			return err;
+-
+-		return qseecom_ioctl(file, convert_cmd(cmd),
+-						(unsigned long)data);
+-	}
+-	break;
+-	case QSEECOM_IOCTL_CREATE_KEY_REQ_32BIT: {
+-		struct qseecom_create_key_req_32bit __user *data32;
+-		struct qseecom_create_key_req *data;
+-		int err;
+-
+-		data32 = compat_ptr(arg);
+-		data = kmalloc(sizeof(*data), GFP_KERNEL);
+-		if (data == NULL)
+-			return -EFAULT;
+-
+-		err = get_qseecom_create_key_req_32bit(data32, data);
+-		if (err)
+-			return err;
+-
+-		return qseecom_ioctl(file, convert_cmd(cmd),
+-						(unsigned long)data);
+-	}
+-	break;
+-	case QSEECOM_IOCTL_WIPE_KEY_REQ_32BIT: {
+-		struct qseecom_wipe_key_req_32bit __user *data32;
+-		struct qseecom_wipe_key_req *data;
+-		int err;
+-
+-		data32 = compat_ptr(arg);
+-		data = kmalloc(sizeof(*data), GFP_KERNEL);
+-		if (data == NULL)
+-			return -EFAULT;
+-
+-		err = get_qseecom_wipe_key_req_32bit(data32, data);
+-		if (err)
+-			return err;
+-
+-		return qseecom_ioctl(file, convert_cmd(cmd),
+-						(unsigned long)data);
+-	}
+-	break;
+-	case QSEECOM_IOCTL_UPDATE_KEY_USER_INFO_REQ_32BIT: {
+-		struct qseecom_update_key_userinfo_req_32bit __user *data32;
+-		struct qseecom_update_key_userinfo_req *data;
+-		int err;
+-
+-		data32 = compat_ptr(arg);
+-		data = kmalloc(sizeof(*data), GFP_KERNEL);
+-		if (data == NULL)
+-			return -EFAULT;
+-
+-		err = get_qseecom_update_key_userinfo_req_32bit(data32, data);
+-		if (err)
+-			return err;
+-
+-		return qseecom_ioctl(file, convert_cmd(cmd),
+-						(unsigned long)data);
+-	}
+-	break;
+-	case QSEECOM_IOCTL_SAVE_PARTITION_HASH_REQ_32BIT: {
+-		struct qseecom_save_partition_hash_req_32bit __user *data32;
+-		struct qseecom_save_partition_hash_req *data;
+-		int err;
+-
+-		data32 = compat_ptr(arg);
+-		data = kmalloc(sizeof(*data), GFP_KERNEL);
+-		if (data == NULL)
+-			return -EFAULT;
+-
+-		err = get_qseecom_save_partition_hash_req_32bit(data32, data);
+-		if (err)
+-			return err;
+-
+-		return qseecom_ioctl(file, convert_cmd(cmd),
+-						(unsigned long)data);
+-	}
+-	break;
+-	case QSEECOM_IOCTL_IS_ES_ACTIVATED_REQ_32BIT: {
+-		struct qseecom_is_es_activated_req_32bit __user *data32;
+-		struct qseecom_is_es_activated_req *data;
+-		int err;
+-
+-		data32 = compat_ptr(arg);
+-		data = kmalloc(sizeof(*data), GFP_KERNEL);
+-		if (data == NULL)
+-			return -EFAULT;
+-
+-		err = get_qseecom_is_es_activated_req_32bit(data32, data);
+-		if (err)
+-			return err;
+-
+-		ret = qseecom_ioctl(file, convert_cmd(cmd),
+-						(unsigned long)data);
+-		err = put_qseecom_is_es_activated_req_32bit(data32, data);
+-		return ret ? ret : err;
+-	}
+-	break;
+-	case QSEECOM_IOCTL_MDTP_CIPHER_DIP_REQ_32BIT: {
+-		struct qseecom_mdtp_cipher_dip_req_32bit __user *data32;
+-		struct qseecom_mdtp_cipher_dip_req *data;
+-		int err;
+-
+-		data32 = compat_ptr(arg);
+-		data = kmalloc(sizeof(*data), GFP_KERNEL);
+-		if (data == NULL)
+-			return -EFAULT;
+-
+-		err = get_qseecom_mdtp_cipher_dip_req_32bit(data32, data);
+-		if (err)
+-			return err;
+-
+-		return qseecom_ioctl(file, convert_cmd(cmd),
+-						(unsigned long)data);
+-	}
+-	break;
+-	case QSEECOM_IOCTL_SEND_MODFD_RESP_32BIT:
+-	case QSEECOM_IOCTL_SEND_MODFD_RESP_64_32BIT: {
+-		struct qseecom_send_modfd_listener_resp_32bit __user *data32;
+-		struct qseecom_send_modfd_listener_resp *data;
+-		int err;
+-
+-		data32 = compat_ptr(arg);
+-		data = kmalloc(sizeof(*data), GFP_KERNEL);
+-		if (data == NULL)
+-			return -EFAULT;
+-
+-		err = get_qseecom_send_modfd_listener_resp_32bit(data32, data);
+-		if (err)
+-			return err;
+-
+-		return qseecom_ioctl(file, convert_cmd(cmd),
+-						(unsigned long)data);
+-	}
+-	break;
+-	case QSEECOM_QTEEC_IOCTL_CLOSE_SESSION_REQ_32BIT: {
+-		struct qseecom_qteec_req_32bit __user *data32;
+-		struct qseecom_qteec_req *data;
+-		int err;
+-
+-		data32 = compat_ptr(arg);
+-		data = kmalloc(sizeof(*data), GFP_KERNEL);
+-		if (data == NULL)
+-			return -EFAULT;
+-
+-		err = get_qseecom_qteec_req_32bit(data32, data);
+-		if (err)
+-			return err;
+-
+-		return qseecom_ioctl(file, convert_cmd(cmd),
+-						(unsigned long)data);
+-	}
+-	break;
+-	case QSEECOM_QTEEC_IOCTL_OPEN_SESSION_REQ_32BIT:
+-	case QSEECOM_QTEEC_IOCTL_INVOKE_MODFD_CMD_REQ_32BIT:
+-	case QSEECOM_QTEEC_IOCTL_REQUEST_CANCELLATION_REQ_32BIT: {
+-		struct qseecom_qteec_modfd_req_32bit __user *data32;
+-		struct qseecom_qteec_modfd_req *data;
+-		int err;
+-
+-		data32 = compat_ptr(arg);
+-		data = kmalloc(sizeof(*data), GFP_KERNEL);
+-		if (data == NULL)
+-			return -EFAULT;
+-
+-		err = get_qseecom_qteec_modfd_req_32bit(data32, data);
+-		if (err)
+-			return err;
+-
+-		return qseecom_ioctl(file, convert_cmd(cmd),
+-						(unsigned long)data);
+-	}
+-	break;
+-	default:
+-		return -ENOIOCTLCMD;
+-	break;
+-	}
+-	return 0;
+-}
+diff --git a/qseecom/qseecom_32bit_impl.h b/qseecom/qseecom_32bit_impl.h
+deleted file mode 100644
+index 068a49b..0000000
+--- a/qseecom/qseecom_32bit_impl.h
++++ /dev/null
+@@ -1,341 +0,0 @@
+-/* SPDX-License-Identifier: GPL-2.0-only */
+-/*
+- * Copyright (c) 2017, 2019-2020, The Linux Foundation. All rights reserved.
+- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+- */
+-#ifndef _UAPI_COMPAT_QSEECOM_H_
+-#define _UAPI_COMPAT_QSEECOM_H_
+-
+-#include <linux/types.h>
+-#include <linux/ioctl.h>
+-
+-#if IS_ENABLED(CONFIG_COMPAT)
+-#include <linux/compat.h>
+-
+-/*
+- * struct qseecom_register_listener_req_32bit -
+- *      for register listener ioctl request
+- * @listener_id - service id (shared between userspace and QSE)
+- * @ifd_data_fd - ion handle
+- * @virt_sb_base - shared buffer base in user space
+- * @sb_size - shared buffer size
+- */
+-struct qseecom_register_listener_req_32bit {
+-	compat_ulong_t listener_id; /* in */
+-	compat_long_t ifd_data_fd; /* in */
+-	compat_uptr_t virt_sb_base; /* in */
+-	compat_ulong_t sb_size; /* in */
+-};
+-
+-/*
+- * struct qseecom_send_cmd_req_32bit - for send command ioctl request
+- * @cmd_req_len - command buffer length
+- * @cmd_req_buf - command buffer
+- * @resp_len - response buffer length
+- * @resp_buf - response buffer
+- */
+-struct qseecom_send_cmd_req_32bit {
+-	compat_uptr_t cmd_req_buf; /* in */
+-	compat_uint_t cmd_req_len; /* in */
+-	compat_uptr_t resp_buf; /* in/out */
+-	compat_uint_t resp_len; /* in/out */
+-};
+-
+-/*
+- * struct qseecom_ion_fd_info_32bit - ion fd handle data information
+- * @fd - ion handle to some memory allocated in user space
+- * @cmd_buf_offset - command buffer offset
+- */
+-struct qseecom_ion_fd_info_32bit {
+-	compat_long_t fd;
+-	compat_ulong_t cmd_buf_offset;
+-};
+-/*
+- * struct qseecom_send_modfd_cmd_req_32bit - for send command ioctl request
+- * @cmd_req_len - command buffer length
+- * @cmd_req_buf - command buffer
+- * @resp_len - response buffer length
+- * @resp_buf - response buffer
+- * @ifd_data_fd - ion handle to memory allocated in user space
+- * @cmd_buf_offset - command buffer offset
+- */
+-struct qseecom_send_modfd_cmd_req_32bit {
+-	compat_uptr_t cmd_req_buf; /* in */
+-	compat_uint_t cmd_req_len; /* in */
+-	compat_uptr_t resp_buf; /* in/out */
+-	compat_uint_t resp_len; /* in/out */
+-	struct qseecom_ion_fd_info_32bit ifd_data[MAX_ION_FD];
+-};
+-
+-/*
+- * struct qseecom_listener_send_resp_req_32bit
+- * signal to continue the send_cmd req.
+- * Used as a trigger from HLOS service to notify QSEECOM that it's done with its
+- * operation and provide the response for QSEECOM can continue the incomplete
+- * command execution
+- * @resp_len - Length of the response
+- * @resp_buf - Response buffer where the response of the cmd should go.
+- */
+-struct qseecom_send_resp_req_32bit {
+-	compat_uptr_t resp_buf; /* in */
+-	compat_uint_t resp_len; /* in */
+-};
+-
+-/*
+- * struct qseecom_load_img_data_32bit
+- * for sending image length information and
+- * ion file descriptor to the qseecom driver. ion file descriptor is used
+- * for retrieving the ion file handle and in turn the physical address of
+- * the image location.
+- * @mdt_len - Length of the .mdt file in bytes.
+- * @img_len - Length of the .mdt + .b00 +..+.bxx images files in bytes
+- * @ion_fd - Ion file descriptor used when allocating memory.
+- * @img_name - Name of the image.
+- */
+-struct qseecom_load_img_req_32bit {
+-	compat_ulong_t mdt_len; /* in */
+-	compat_ulong_t img_len; /* in */
+-	compat_long_t  ifd_data_fd; /* in */
+-	char	 img_name[MAX_APP_NAME_SIZE]; /* in */
+-	compat_ulong_t app_arch; /* in */
+-	compat_uint_t app_id; /* out*/
+-};
+-
+-struct qseecom_set_sb_mem_param_req_32bit {
+-	compat_long_t ifd_data_fd; /* in */
+-	compat_uptr_t virt_sb_base; /* in */
+-	compat_ulong_t sb_len; /* in */
+-};
+-
+-/*
+- * struct qseecom_qseos_version_req_32bit - get qseos version
+- * @qseos_version - version number
+- */
+-struct qseecom_qseos_version_req_32bit {
+-	compat_uint_t qseos_version; /* in */
+-};
+-
+-/*
+- * struct qseecom_qseos_app_load_query_32bit - verify if app is loaded in qsee
+- * @app_name[MAX_APP_NAME_SIZE]-  name of the app.
+- * @app_id - app id.
+- */
+-struct qseecom_qseos_app_load_query_32bit {
+-	char app_name[MAX_APP_NAME_SIZE]; /* in */
+-	compat_uint_t app_id; /* out */
+-	compat_ulong_t app_arch;
+-};
+-
+-struct qseecom_send_svc_cmd_req_32bit {
+-	compat_ulong_t cmd_id;
+-	compat_uptr_t cmd_req_buf; /* in */
+-	compat_uint_t cmd_req_len; /* in */
+-	compat_uptr_t resp_buf; /* in/out */
+-	compat_uint_t resp_len; /* in/out */
+-};
+-
+-struct qseecom_create_key_req_32bit {
+-	unsigned char hash32[QSEECOM_HASH_SIZE];
+-	enum qseecom_key_management_usage_type usage;
+-};
+-
+-struct qseecom_wipe_key_req_32bit {
+-	enum qseecom_key_management_usage_type usage;
+-	compat_int_t wipe_key_flag;
+-};
+-
+-struct qseecom_update_key_userinfo_req_32bit {
+-	unsigned char current_hash32[QSEECOM_HASH_SIZE];
+-	unsigned char new_hash32[QSEECOM_HASH_SIZE];
+-	enum qseecom_key_management_usage_type usage;
+-};
+-
+-/*
+- * struct qseecom_save_partition_hash_req_32bit
+- * @partition_id - partition id.
+- * @hash[SHA256_DIGEST_LENGTH] -  sha256 digest.
+- */
+-struct qseecom_save_partition_hash_req_32bit {
+-	compat_int_t partition_id; /* in */
+-	char digest[SHA256_DIGEST_LENGTH]; /* in */
+-};
+-
+-/*
+- * struct qseecom_is_es_activated_req_32bit
+- * @is_activated - 1=true , 0=false
+- */
+-struct qseecom_is_es_activated_req_32bit {
+-	compat_int_t is_activated; /* out */
+-};
+-
+-/*
+- * struct qseecom_mdtp_cipher_dip_req_32bit
+- * @in_buf - input buffer
+- * @in_buf_size - input buffer size
+- * @out_buf - output buffer
+- * @out_buf_size - output buffer size
+- * @direction - 0=encrypt, 1=decrypt
+- */
+-struct qseecom_mdtp_cipher_dip_req_32bit {
+-	compat_uptr_t in_buf;
+-	compat_uint_t in_buf_size;
+-	compat_uptr_t out_buf;
+-	compat_uint_t out_buf_size;
+-	compat_uint_t direction;
+-};
+-
+-/*
+- * struct qseecom_send_modfd_resp_32bit - for send command ioctl request
+- * @req_len - command buffer length
+- * @req_buf - command buffer
+- * @ifd_data_fd - ion handle to memory allocated in user space
+- * @cmd_buf_offset - command buffer offset
+- */
+-struct qseecom_send_modfd_listener_resp_32bit {
+-	compat_uptr_t resp_buf_ptr; /* in */
+-	compat_uint_t resp_len; /* in */
+-	struct qseecom_ion_fd_info_32bit ifd_data[MAX_ION_FD]; /* in */
+-};
+-
+-struct qseecom_qteec_req_32bit {
+-	compat_uptr_t req_ptr;
+-	compat_ulong_t req_len;
+-	compat_uptr_t resp_ptr;
+-	compat_ulong_t resp_len;
+-};
+-
+-struct qseecom_qteec_modfd_req_32bit {
+-	compat_uptr_t req_ptr;
+-	compat_ulong_t req_len;
+-	compat_uptr_t resp_ptr;
+-	compat_ulong_t resp_len;
+-	struct qseecom_ion_fd_info_32bit ifd_data[MAX_ION_FD];
+-};
+-
+-struct qseecom_ce_pipe_entry_32bit {
+-	compat_int_t valid;
+-	compat_uint_t ce_num;
+-	compat_uint_t ce_pipe_pair;
+-};
+-
+-struct ce_info_req_32bit {
+-	unsigned char handle[MAX_CE_INFO_HANDLE_SIZE];
+-	compat_uint_t usage;
+-	compat_uint_t unit_num;
+-	compat_uint_t num_ce_pipe_entries;
+-	struct qseecom_ce_pipe_entry_32bit
+-				ce_pipe_entry[MAX_CE_PIPE_PAIR_PER_UNIT];
+-};
+-
+-struct file;
+-extern long qseecom_ioctl_32bit(struct file *file,
+-					unsigned int cmd, unsigned long arg);
+-
+-extern long qseecom_ioctl(struct file *file,
+-					unsigned int cmd, unsigned long arg);
+-
+-#define QSEECOM_IOCTL_REGISTER_LISTENER_REQ_32BIT \
+-	_IOWR(QSEECOM_IOC_MAGIC, 1, struct qseecom_register_listener_req_32bit)
+-
+-#define QSEECOM_IOCTL_UNREGISTER_LISTENER_REQ_32BIT \
+-	_IO(QSEECOM_IOC_MAGIC, 2)
+-
+-#define QSEECOM_IOCTL_SEND_CMD_REQ_32BIT \
+-	_IOWR(QSEECOM_IOC_MAGIC, 3, struct qseecom_send_cmd_req_32bit)
+-
+-#define QSEECOM_IOCTL_SEND_MODFD_CMD_REQ_32BIT \
+-	_IOWR(QSEECOM_IOC_MAGIC, 4, struct qseecom_send_modfd_cmd_req_32bit)
+-
+-#define QSEECOM_IOCTL_RECEIVE_REQ_32BIT \
+-	_IO(QSEECOM_IOC_MAGIC, 5)
+-
+-#define QSEECOM_IOCTL_SEND_RESP_REQ_32BIT \
+-	_IO(QSEECOM_IOC_MAGIC, 6)
+-
+-#define QSEECOM_IOCTL_LOAD_APP_REQ_32BIT \
+-	_IOWR(QSEECOM_IOC_MAGIC, 7, struct qseecom_load_img_req_32bit)
+-
+-#define QSEECOM_IOCTL_SET_MEM_PARAM_REQ_32BIT \
+-	_IOWR(QSEECOM_IOC_MAGIC, 8, struct qseecom_set_sb_mem_param_req_32bit)
+-
+-#define QSEECOM_IOCTL_UNLOAD_APP_REQ_32BIT \
+-	_IO(QSEECOM_IOC_MAGIC, 9)
+-
+-#define QSEECOM_IOCTL_GET_QSEOS_VERSION_REQ_32BIT \
+-	_IOWR(QSEECOM_IOC_MAGIC, 10, struct qseecom_qseos_version_req_32bit)
+-
+-#define QSEECOM_IOCTL_PERF_ENABLE_REQ_32BIT \
+-	_IO(QSEECOM_IOC_MAGIC, 11)
+-
+-#define QSEECOM_IOCTL_PERF_DISABLE_REQ_32BIT \
+-	_IO(QSEECOM_IOC_MAGIC, 12)
+-
+-#define QSEECOM_IOCTL_LOAD_EXTERNAL_ELF_REQ_32BIT \
+-	_IOWR(QSEECOM_IOC_MAGIC, 13, struct qseecom_load_img_req_32bit)
+-
+-#define QSEECOM_IOCTL_UNLOAD_EXTERNAL_ELF_REQ_32BIT \
+-	_IO(QSEECOM_IOC_MAGIC, 14)
+-
+-#define QSEECOM_IOCTL_APP_LOADED_QUERY_REQ_32BIT \
+-	_IOWR(QSEECOM_IOC_MAGIC, 15, struct qseecom_qseos_app_load_query_32bit)
+-
+-#define QSEECOM_IOCTL_SEND_CMD_SERVICE_REQ_32BIT \
+-	_IOWR(QSEECOM_IOC_MAGIC, 16, struct qseecom_send_svc_cmd_req_32bit)
+-
+-#define QSEECOM_IOCTL_CREATE_KEY_REQ_32BIT \
+-	_IOWR(QSEECOM_IOC_MAGIC, 17, struct qseecom_create_key_req_32bit)
+-
+-#define QSEECOM_IOCTL_WIPE_KEY_REQ_32BIT \
+-	_IOWR(QSEECOM_IOC_MAGIC, 18, struct qseecom_wipe_key_req_32bit)
+-
+-#define QSEECOM_IOCTL_SAVE_PARTITION_HASH_REQ_32BIT \
+-	_IOWR(QSEECOM_IOC_MAGIC, 19, \
+-				struct qseecom_save_partition_hash_req_32bit)
+-
+-#define QSEECOM_IOCTL_IS_ES_ACTIVATED_REQ_32BIT \
+-	_IOWR(QSEECOM_IOC_MAGIC, 20, struct qseecom_is_es_activated_req_32bit)
+-
+-#define QSEECOM_IOCTL_SEND_MODFD_RESP_32BIT \
+-	_IOWR(QSEECOM_IOC_MAGIC, 21, \
+-				struct qseecom_send_modfd_listener_resp_32bit)
+-
+-#define QSEECOM_IOCTL_SET_BUS_SCALING_REQ_32BIT \
+-	_IOWR(QSEECOM_IOC_MAGIC, 23, int)
+-
+-#define QSEECOM_IOCTL_UPDATE_KEY_USER_INFO_REQ_32BIT \
+-	_IOWR(QSEECOM_IOC_MAGIC, 24, \
+-			struct qseecom_update_key_userinfo_req_32bit)
+-
+-#define QSEECOM_QTEEC_IOCTL_OPEN_SESSION_REQ_32BIT \
+-	_IOWR(QSEECOM_IOC_MAGIC, 30, struct qseecom_qteec_modfd_req_32bit)
+-
+-#define QSEECOM_QTEEC_IOCTL_CLOSE_SESSION_REQ_32BIT \
+-	_IOWR(QSEECOM_IOC_MAGIC, 31, struct qseecom_qteec_req_32bit)
+-
+-#define QSEECOM_QTEEC_IOCTL_INVOKE_MODFD_CMD_REQ_32BIT \
+-	_IOWR(QSEECOM_IOC_MAGIC, 32, struct qseecom_qteec_modfd_req_32bit)
+-
+-#define QSEECOM_QTEEC_IOCTL_REQUEST_CANCELLATION_REQ_32BIT \
+-	_IOWR(QSEECOM_IOC_MAGIC, 33, struct qseecom_qteec_modfd_req_32bit)
+-
+-#define QSEECOM_IOCTL_MDTP_CIPHER_DIP_REQ_32BIT \
+-	_IOWR(QSEECOM_IOC_MAGIC, 34, struct qseecom_mdtp_cipher_dip_req_32bit)
+-
+-#define QSEECOM_IOCTL_SEND_MODFD_CMD_64_REQ_32BIT \
+-	_IOWR(QSEECOM_IOC_MAGIC, 35, struct qseecom_send_modfd_cmd_req_32bit)
+-
+-#define QSEECOM_IOCTL_SEND_MODFD_RESP_64_32BIT \
+-	_IOWR(QSEECOM_IOC_MAGIC, 36, \
+-				struct qseecom_send_modfd_listener_resp_32bit)
+-#define QSEECOM_IOCTL_GET_CE_PIPE_INFO_32BIT \
+-	_IOWR(QSEECOM_IOC_MAGIC, 40, \
+-				struct qseecom_ce_info_req)
+-#define QSEECOM_IOCTL_FREE_CE_PIPE_INFO_32BIT \
+-	_IOWR(QSEECOM_IOC_MAGIC, 41, \
+-				struct qseecom_ce_info_req)
+-#define QSEECOM_IOCTL_QUERY_CE_PIPE_INFO_32BIT \
+-	_IOWR(QSEECOM_IOC_MAGIC, 42, \
+-				struct qseecom_ce_info_req_32bit)
+-
+-#endif
+-#endif /* _UAPI_COMPAT_QSEECOM_H_ */

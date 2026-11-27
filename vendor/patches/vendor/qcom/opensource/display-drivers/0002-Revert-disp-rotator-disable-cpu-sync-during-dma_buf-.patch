@@ -1,0 +1,37 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: yodaliu <yodaliu@gmail.com>
+Date: Fri, 27 Nov 2026 16:52:51 +0800
+Subject: [PATCH 2/3] Revert "disp: rotator: disable cpu sync during dma_buf
+ calls"
+
+This reverts commit a551760f1403f6464a43d6fcefac43a4d87c370a.
+
+The stock FiiO M21 FW 1.1.0 msm_drm sets only DMA_ATTR_DELAYED_UNMAP in sde_mdp_data_map.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ rotator/sde_rotator_util.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/rotator/sde_rotator_util.c b/rotator/sde_rotator_util.c
+index 46b0a582..f29fba8a 100644
+--- a/rotator/sde_rotator_util.c
++++ b/rotator/sde_rotator_util.c
+@@ -1,7 +1,7 @@
+ // SPDX-License-Identifier: GPL-2.0-only
+ /*
+  * Copyright (c) 2012, 2015-2019, 2021, The Linux Foundation. All rights reserved.
+- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
++ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+  */
+ #define pr_fmt(fmt)	"%s: " fmt, __func__
+ 
+@@ -903,7 +903,7 @@ static int sde_mdp_map_buffer(struct sde_mdp_img_data *data, bool rotator,
+ 		 * provided here.
+ 		 */
+ 		data->srcp_attachment->dma_map_attrs |=
+-			DMA_ATTR_DELAYED_UNMAP | DMA_ATTR_SKIP_CPU_SYNC;
++			DMA_ATTR_DELAYED_UNMAP;
+ 
+ 		if (data->srcp_dma_buf && data->srcp_dma_buf->ops &&
+ 				data->srcp_dma_buf->ops->get_flags) {

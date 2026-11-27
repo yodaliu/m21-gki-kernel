@@ -38,14 +38,17 @@ Verdicts:
 
 ## Sources
 
-**msm-kernel**: the base is `KERNEL.PLATFORM.2.0.r1-08500-kernel.0` (e4ae393050a4, 5.15.41).
+**msm-kernel**: the base is `KERNEL.PLATFORM.2.0.r12-01500-kernel.0` (5fc62c1db11e, 5.15.41, 2023-03-29, branch `kernel.lnx.5.15.r16-rel`).
 
 - The stock vermagic `5.15.41-gf7d0984aa5e2-dirty` names a non-public FiiO/Quectel commit.
-- The 08500 tag was identified from the clock-mux order in the stock `debugcc-khaje.ko`.
+- The tag was chosen by building candidate tags and counting identical in-tree modules (206/218).
+- `patches/kernel_platform/msm-kernel/` holds 6 upstream commits stock carries beyond the tag (gcc-khaje SDCC floor ops, 4 WALT commits, f4a82a39 dwc3 core as syscore device), and 9 FiiO/Quectel changes reconstructed from the stock modules. `build-vendor-modules.sh` applies them, and skips them when already applied.
 
 **Techpacks** come from manifest `AU_LINUX_ANDROID_LA.VENDOR.13.2.0.R1.11.00.00.925.127`.
 
 - Projects that manifest does not list (audio, graphics, display, camera, video) use the newest commit before 2023-02-01 on the branch named in `SOURCES`.
+- graphics is pinned to `aa5e1f9` (2023-01-16), chosen by scoring the branch history on symbols stock has and lacks.
+- `patches/vendor/qcom/opensource/<techpack>/` reverts upstream commits stock lacks, cherry-picks ones it has (original authors kept), and adds the reconstructed FiiO changes.
 
 **Build-host adjustments** (none change module code):
 
@@ -55,43 +58,60 @@ Verdicts:
 - `KCFLAGS=-D__ANDROID_COMMON_KERNEL__`, as in Qualcomm's `build.config.common`.
 - Techpack Kbuild files are re-indented and their bare `export` lines dropped, so GNU make 4.4 can parse them.
 - `mmrm_test_module` is not built because its source is not public.
+- msm_drm imports `fiio_device_register` and `fiio_device_get_data_by_name` from the FiiO private module `fiio_primary_modules`. `symvers/fiio-private.symvers` holds their export CRCs (ABI metadata only) and is passed in `KBUILD_EXTRA_SYMBOLS`, so msm_drm records the same CRCs as stock.
 
 ## Results
 
 | Set | Modules | IDENTICAL | CLOSE | DIFFERENT | MISSING |
 |---|---:|---:|---:|---:|---:|
-| msm-kernel in-tree | 218 | 192 | 13 | 13 | 0 |
-| techpacks | 57 | 42 | 3 | 11 | 1 |
-| Qualcomm total | 275 | 234 (85%) | 16 | 24 | 1 |
+| msm-kernel in-tree | 218 | 216 | 2 | 0 | 0 |
+| techpacks | 57 | 49 | 5 | 2 | 1 |
+| Qualcomm total | 275 | 265 (96%) | 7 | 2 | 1 |
 | FiiO/Quectel private | 36 | no public source | | | |
 
-**FiiO/Quectel changes found in Qualcomm drivers:**
+**In-tree FiiO/Quectel changes, reconstructed** (patches 0007–0015):
 
-| Module | Stock-only code |
-|---|---|
-| socinfo | `quec_get_image_version` |
-| phy_msm_snps_hs | `msm_hsphy_ctrl` sysfs |
-| msm_geni_serial | `set_manual_flow` |
-| sdhci_msm | `set_caps` |
-| rtc_pm8xxx | `us_val` instead of `ms_val` |
-| slimbus | `slim_vote_for_suspend` |
-| machine_dlkm | `ext_spk_switch_*` (external speaker switch GPIO) |
-| msm_drm | `dsi_panel_fiio_load_work`; imports `fiio_device_*` |
+| Module | Change | Rebuilt |
+|---|---|---|
+| phy_msm_snps_hs | sysfs `ctrl` for PHY tuning overrides; 1000 mA vbus draw | IDENTICAL |
+| socinfo | `quec_get_image_*_version` field parsing | CLOSE (one function schedules differently) |
+| sdhci_msm | `MMC_CAP_AGGRESSIVE_PM` only for mmc0 | IDENTICAL |
+| msm_geni_serial | 115200 baud on every UART except ttyHS0 | IDENTICAL |
+| qpnp_power_on | always log key events | IDENTICAL |
+| pinctrl_spmi_gpio | 100 ms delay at end of probe | IDENTICAL |
+| qcom_spmi_adc5 | PM6125 AMUX1/AMUX3 voltage channels | IDENTICAL |
+| snd_usb_audio_qmi | 480-frame × 8 periods; set altsetting before endpoint setup | IDENTICAL |
+| dwc3_msm | on suspend, `disable_irq()` the power event irq right after `disable_irq_nosync()` | IDENTICAL |
 
-**Revision drift:** FiiO's BSP mixes techpack snapshots.
+The other two CLOSE modules: socinfo (error branches of `quec_get_image_version` laid out in a different order, same logic) and slimbus (all functions identical, only string merging differs).
 
-- **audio:** stock has `msm_audio_ion_free_fd_data` but no `snd_event_master_register_v2`.
-- **kgsl:** stock is newer than the pinned commit (it has hw-fence and syncobj tracepoints).
-- **qcacld:** stock is older than the pinned commit (it still uses `hdd_bus_bw_*`).
+**Techpack changes, reconstructed** (`patches/vendor/qcom/opensource/`), from Ghidra decompilation of the stock modules (which carry DWARF) checked against disassembly and strings:
 
-The remaining CLOSE modules differ only in inlining or symbol numbering.
+| Techpack | Patches | Rebuilt |
+|---|---|---|
+| audio-kernel | revert 82ba6ff (snd card standby state) and 92a2717 (ion free lock); FiiO: on an APM close-all timeout, drop the fd list with `msm_audio_ion_free_fd_data()` instead of unmapping buffers the ADSP may still use; bengal machine driver routing (PRI MI2S RX to `fiio_codec`, SoC-driven I2S clocks and MCLK_2 with `qcom,mi2s-master`, `qcom,wcd-disabled`, external speaker GPIO and `Ext_Spk_Switch`) | all 26 IDENTICAL |
+| securemsm-kernel | revert b5f2395 (qseecom 32-bit compat) | all IDENTICAL |
+| graphics-kernel | upstream 4d87657 (deferred_destroy NULL fix), revert 085a050 | msm_kgsl CLOSE (CFI jump-table numbering only) |
+| display-drivers | revert 5d6cec2 (stock keeps these error logs), revert a551760 (stock's rotator does not set `DMA_ATTR_SKIP_CPU_SYNC`); FiiO: in-cell touch reset `qcom,platform-tp-reset-gpio`, keep reset/disp_en on at power off during gesture wake-up, look up the touch driver's `ts module` data through `fiio_device_register` | msm_drm CLOSE (register allocation in `dsi_panel_power_on`) |
+
+**Not reconstructed:**
+
+- **camera:** stock compiles Quectel's private aw95016/CCI driver code into camera.ko (about 60 functions, importing `quectel_*`). That is private-driver code, so it is left alone.
+- **qca_cld3_wlan:** stock is a much older qcacld branch (`blm`, `csr_roam`; about 1,000 functions differ). It needs qcacld, cmn and fw-api re-pinned together.
+
+Each remaining CLOSE module was checked by disassembly:
+
+- ipam, msm_kgsl: only the numbers in CFI jump-table names (`name.NNNN_jt`) differ; all sizes match.
+- rmnet_core: all function sizes match; the count comes from how the compare tool handles same-name static functions.
+- bt_fm_slim: stock has one extra empty function, `btfm_slim_get_hwep_details` (just `ret`, not exported), that the public source lacks.
+- msm_drm: `dsi_panel_power_on` differs only in register allocation.
 
 **CRC and load-order check** (`results/crc-verify.txt`): the 274 rebuilt modules were swapped into the full stock partition trees (420 files) and checked with `scripts/verify-all-modules.py` against the 5.15.220-m21 `vmlinux.symvers`.
 
 - Stock passes.
-- With the rebuilt modules there are **0 CRC mismatches** (23,036 kernel and 2,423 inter-module references resolved).
+- With the rebuilt modules there are **0 CRC mismatches** (23,070 kernel and 2,434 inter-module references resolved; no import lacks a version record).
 - The only errors are 4 load-order errors in qca_cld3_wlan. The pinned qcacld is newer than stock and imports `qcom_va_md_*`, whose provider the stock load order does not guarantee.
 
 This is a static ABI and metadata check. It does not test probing or behaviour on hardware.
 
-Do **not** install the rebuilt modules on the device. The modules with FiiO changes would lose those features, and these builds are for comparison only.
+Do **not** install the rebuilt modules on the device. The FiiO changes are rewritten from decompilation and untested on hardware, camera and qca_cld3_wlan still differ from stock, and these builds are for comparison only.

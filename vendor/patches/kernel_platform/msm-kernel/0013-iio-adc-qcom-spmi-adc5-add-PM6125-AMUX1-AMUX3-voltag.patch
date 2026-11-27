@@ -1,0 +1,29 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: yodaliu <yodaliu@gmail.com>
+Date: Fri, 27 Nov 2026 12:32:59 +0800
+Subject: [PATCH 13/15] iio: adc: qcom-spmi-adc5: add PM6125 AMUX1/AMUX3
+ voltage channels
+
+Reconstructed from the stock FiiO M21 FW 1.1.0 module by disassembly
+comparison; the rebuilt module matches the stock one.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ drivers/iio/adc/qcom-spmi-adc5.c | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/drivers/iio/adc/qcom-spmi-adc5.c b/drivers/iio/adc/qcom-spmi-adc5.c
+index 424f46e8129..498dbe25f67 100644
+--- a/drivers/iio/adc/qcom-spmi-adc5.c
++++ b/drivers/iio/adc/qcom-spmi-adc5.c
+@@ -891,6 +891,10 @@ static const struct adc5_channels adc5_chans_pmic[ADC5_MAX_CHANNEL] = {
+ 					SCALE_HW_CALIB_PM5_SMB_TEMP)
+ 	[ADC5_PARALLEL_ISENSE]	= ADC5_CHAN_VOLT("parallel_isense", 0,
+ 					SCALE_HW_CALIB_PM5_CUR)
++	[ADC5_GPIO1]		= ADC5_CHAN_VOLT("pm6125_amux1_gpio3", 0,
++					SCALE_HW_CALIB_DEFAULT)
++	[ADC5_GPIO3]		= ADC5_CHAN_VOLT("pm6125_amux3_gpio6", 0,
++					SCALE_HW_CALIB_DEFAULT)
+ 	[ADC5_GPIO1_100K_PU]	= ADC5_CHAN_TEMP("gpio1_100k_pu", 0,
+ 					SCALE_HW_CALIB_THERM_100K_PULLUP)
+ 	[ADC5_GPIO2_100K_PU]	= ADC5_CHAN_TEMP("gpio2_100k_pu", 0,

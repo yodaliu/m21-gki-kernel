@@ -1,0 +1,38 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: Shaleen Agrawal <quic_shalagra@quicinc.com>
+Date: Tue, 8 Aug 2023 18:11:39 -0700
+Subject: [PATCH 02/15] sched/walt: Introduce WALT_BUG if mark start progresses
+ too far
+
+A crash was observed where a task's mark start was observed to be
+greater than 1 window boundary away from the task's window start. This
+is problematic as it indicates there was a UTRA call that took place,
+where the runqueue's window start was updated, but the task's window
+start wasn't.
+
+Introduce bug_on to catch this issue earlier, and gain insights from the
+stack trace and event to better understand the background.
+
+Change-Id: Ia1546e537ea5722a6065581898e1516274ed53ea
+Signed-off-by: Shaleen Agrawal <quic_shalagra@quicinc.com>
+Signed-off-by: Srinivasarao Pathipati <quic_c_spathi@quicinc.com>
+---
+ kernel/sched/walt/walt.c | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/kernel/sched/walt/walt.c b/kernel/sched/walt/walt.c
+index eb393f49069..aa3890095d9 100644
+--- a/kernel/sched/walt/walt.c
++++ b/kernel/sched/walt/walt.c
+@@ -2316,6 +2316,11 @@ static void walt_update_task_ravg(struct task_struct *p, struct rq *rq, int even
+ 
+ done:
+ 	wts->mark_start = wallclock;
++	if (wts->mark_start > (wts->window_start + sched_ravg_window))
++		WALT_BUG(WALT_BUG_WALT, p,
++			"CPU%d: %s task %s(%d)'s ms=%llu is ahead of ws=%llu by more than 1 window on rq=%d event=%d",
++			raw_smp_processor_id(), __func__, p->comm, p->pid,
++			wts->mark_start, wts->window_start, rq->cpu, event);
+ 
+ 	run_walt_irq_work_rollover(old_window_start, rq);
+ }

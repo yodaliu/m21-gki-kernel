@@ -1,0 +1,26 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: yodaliu <yodaliu@gmail.com>
+Date: Fri, 27 Nov 2026 12:32:59 +0800
+Subject: [PATCH 11/15] input: qpnp-power-on: always log PMIC key events
+
+Reconstructed from the stock FiiO M21 FW 1.1.0 module by disassembly
+comparison; the rebuilt module matches the stock one.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ drivers/input/misc/qpnp-power-on.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/drivers/input/misc/qpnp-power-on.c b/drivers/input/misc/qpnp-power-on.c
+index 69bb7b130ee..0f334807d24 100644
+--- a/drivers/input/misc/qpnp-power-on.c
++++ b/drivers/input/misc/qpnp-power-on.c
+@@ -1030,7 +1030,7 @@ static int qpnp_pon_input_dispatch(struct qpnp_pon *pon, u32 pon_type)
+ 		return -EINVAL;
+ 	}
+ 
+-	pr_debug("PMIC input: code=%d, status=0x%02X\n", cfg->key_code,
++	printk("PMIC input: code=%d, status=0x%02X\n", cfg->key_code,
+ 		pon_rt_sts);
+ 	key_status = pon_rt_sts & pon_rt_bit;
+ 

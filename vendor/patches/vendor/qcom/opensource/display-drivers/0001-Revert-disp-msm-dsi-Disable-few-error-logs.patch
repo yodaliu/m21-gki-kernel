@@ -1,0 +1,64 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: yodaliu <yodaliu@gmail.com>
+Date: Fri, 27 Nov 2026 13:09:10 +0800
+Subject: [PATCH 1/3] Revert "disp: msm: dsi: Disable few error logs"
+
+This reverts commit 5d6cec2985ca1e5f1038b4809340f84dd089a3f5.
+
+The stock FiiO M21 FW 1.1.0 msm_drm still has these error logs.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ msm/dsi/dsi_ctrl.c    | 4 ++--
+ msm/dsi/dsi_pll.c     | 2 +-
+ msm/dsi/dsi_pll_5nm.c | 2 +-
+ 3 files changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/msm/dsi/dsi_ctrl.c b/msm/dsi/dsi_ctrl.c
+index a4d5f871..ac6c42dc 100644
+--- a/msm/dsi/dsi_ctrl.c
++++ b/msm/dsi/dsi_ctrl.c
+@@ -1258,7 +1258,7 @@ int dsi_message_validate_tx_mode(struct dsi_ctrl *dsi_ctrl,
+ 	if (*flags & DSI_CTRL_CMD_FIFO_STORE) {
+ 		/* if command size plus header is greater than fifo size */
+ 		if ((cmd_len + 4) > DSI_CTRL_MAX_CMD_FIFO_STORE_SIZE) {
+-			DSI_CTRL_DEBUG(dsi_ctrl, "Cannot transfer Cmd in FIFO config\n");
++			DSI_CTRL_ERR(dsi_ctrl, "Cannot transfer Cmd in FIFO config\n");
+ 			return -ENOTSUPP;
+ 		}
+ 		if (!dsi_ctrl->hw.ops.kickoff_fifo_command) {
+@@ -1497,7 +1497,7 @@ static int dsi_message_tx(struct dsi_ctrl *dsi_ctrl, struct dsi_cmd_desc *cmd_de
+ 	/* Validate the mode before sending the command */
+ 	rc = dsi_message_validate_tx_mode(dsi_ctrl, msg->tx_len, flags);
+ 	if (rc) {
+-		DSI_CTRL_DEBUG(dsi_ctrl,
++		DSI_CTRL_ERR(dsi_ctrl,
+ 			"Cmd tx validation failed, cannot transfer cmd\n");
+ 		rc = -ENOTSUPP;
+ 		goto error;
+diff --git a/msm/dsi/dsi_pll.c b/msm/dsi/dsi_pll.c
+index 48f391b5..48166a1c 100644
+--- a/msm/dsi/dsi_pll.c
++++ b/msm/dsi/dsi_pll.c
+@@ -161,7 +161,7 @@ static int dsi_pll_parse_dfps_from_dt(struct platform_device *pdev,
+ 	}
+ 
+ 	if (header.magic_id != DSI_PLL_TRIM_CODES_MAGIC_ID) {
+-		DSI_PLL_DBG(pll_res, "pll codes magic id not match\n");
++		DSI_PLL_ERR(pll_res, "pll codes magic id not match\n");
+ 		rc = -EINVAL;
+ 		goto err;
+ 	}
+diff --git a/msm/dsi/dsi_pll_5nm.c b/msm/dsi/dsi_pll_5nm.c
+index 5ca812ce..34063e62 100644
+--- a/msm/dsi/dsi_pll_5nm.c
++++ b/msm/dsi/dsi_pll_5nm.c
+@@ -198,7 +198,7 @@ static void dsi_pll_config_slave(struct dsi_pll_resource *rsc)
+ 	rsc->slave = NULL;
+ 
+ 	if (!orsc) {
+-		DSI_PLL_DBG(rsc,
++		DSI_PLL_WARN(rsc,
+ 			"slave PLL unavilable, assuming standalone config\n");
+ 		return;
+ 	}

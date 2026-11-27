@@ -1,0 +1,31 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: yodaliu <yodaliu@gmail.com>
+Date: Fri, 27 Nov 2026 12:32:59 +0800
+Subject: [PATCH 09/15] mmc: sdhci-msm: enable aggressive PM only for mmc0
+
+Only the eMMC host (mmc0) gets MMC_CAP_AGGRESSIVE_PM; log the host name.
+
+Reconstructed from the stock FiiO M21 FW 1.1.0 module by disassembly
+comparison; the rebuilt module matches the stock one.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ drivers/mmc/host/sdhci-msm.c | 5 ++++-
+ 1 file changed, 4 insertions(+), 1 deletion(-)
+
+diff --git a/drivers/mmc/host/sdhci-msm.c b/drivers/mmc/host/sdhci-msm.c
+index a927dce2454..f75c3640acb 100644
+--- a/drivers/mmc/host/sdhci-msm.c
++++ b/drivers/mmc/host/sdhci-msm.c
+@@ -4877,7 +4877,10 @@ static int sdhci_msm_setup_ice_clk(struct sdhci_msm_host *msm_host,
+ 
+ static void sdhci_msm_set_caps(struct sdhci_msm_host *msm_host)
+ {
+-	msm_host->mmc->caps |= MMC_CAP_AGGRESSIVE_PM;
++	printk("%s , mmc_name:%s\n", __func__, mmc_hostname(msm_host->mmc));
++	/* runtime-suspend only the eMMC (mmc0) when idle */
++	if (!strcmp(mmc_hostname(msm_host->mmc), "mmc0"))
++		msm_host->mmc->caps |= MMC_CAP_AGGRESSIVE_PM;
+ 	msm_host->mmc->caps |= MMC_CAP_WAIT_WHILE_BUSY | MMC_CAP_NEED_RSP_BUSY;
+ }
+ /* RUMI W/A for SD card */

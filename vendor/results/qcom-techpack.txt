@@ -1,58 +1,57 @@
-adsp_loader_dlkm       IDENTICAL  
-audio_pkt_dlkm         DIFFERENT  funcs 13/14 same-size, exports =, imports -1/+0, strings -0/+0
-audio_prm_dlkm         IDENTICAL  
-audpkt_ion_dlkm        DIFFERENT  funcs 16/22 same-size, exports !=, imports -0/+0, strings -3/+3
-bolero_cdc_dlkm        IDENTICAL  
-bt_fm_slim             CLOSE      funcs 30/31 same-size, exports =, imports -0/+0, strings -0/+0
-btpower                IDENTICAL  
-camera                 DIFFERENT  funcs 1130/1240 same-size, exports !=, imports -20/+2, strings -150/+2
-cnss_nl                IDENTICAL  
-cnss_prealloc          IDENTICAL  
-cnss_utils             IDENTICAL  
-gpr_dlkm               IDENTICAL  
-gsim                   IDENTICAL  
-hdcp_qseecom_dlkm      IDENTICAL  
-icnss2                 IDENTICAL  
-ipa_clientsm           IDENTICAL  
-ipam                   CLOSE      funcs 1549/1568 same-size, exports =, imports -0/+0, strings -0/+0
-ipanetm                IDENTICAL  
-machine_dlkm           DIFFERENT  funcs 36/44 same-size, exports =, imports -6/+0, strings -24/+7
-mbhc_dlkm              IDENTICAL  
-mmrm_test_module       MISSING    
-msm_drm                DIFFERENT  funcs 2638/2662 same-size, exports =, imports -2/+0, strings -18/+4
-msm_kgsl               DIFFERENT  funcs 1970/2219 same-size, exports !=, imports -11/+2, strings -35/+11
-msm_mmrm               IDENTICAL  
-msm_video              IDENTICAL  
-nxp_nci                IDENTICAL  
-pinctrl_lpi_dlkm       IDENTICAL  
-q6_dlkm                IDENTICAL  
-q6_notifier_dlkm       DIFFERENT  funcs 15/16 same-size, exports =, imports -0/+0, strings -0/+0
-q6_pdr_dlkm            IDENTICAL  
-qca_cld3_wlan          DIFFERENT  funcs 10410/12389 same-size, exports =, imports -10/+8, strings -1054/+2069
-qce50_dlkm             IDENTICAL  
-qcedev_mod_dlkm        IDENTICAL  
-qcrypto_msm_dlkm       IDENTICAL  
-qrng_dlkm              IDENTICAL  
-qseecom_dlkm           DIFFERENT  funcs 65/70 same-size, exports =, imports -2/+1, strings -12/+1
-radio_i2c_rtc6226_qca  IDENTICAL  
-rmnet_core             CLOSE      funcs 394/395 same-size, exports =, imports -0/+0, strings -0/+0
-rmnet_ctl              IDENTICAL  
-rmnet_wlan             IDENTICAL  
-rndisipam              IDENTICAL  
-rx_macro_dlkm          IDENTICAL  
-smcinvoke_dlkm         IDENTICAL  
-snd_event_dlkm         DIFFERENT  funcs 8/10 same-size, exports !=, imports -0/+0, strings -1/+3
-spf_core_dlkm          DIFFERENT  funcs 13/15 same-size, exports =, imports -1/+0, strings -0/+0
-stub_dlkm              IDENTICAL  
-swr_ctrl_dlkm          IDENTICAL  
-swr_dlkm               IDENTICAL  
-tx_macro_dlkm          IDENTICAL  
-tz_log_dlkm            IDENTICAL  
-va_macro_dlkm          IDENTICAL  
-wcd937x_dlkm           IDENTICAL  
-wcd937x_slave_dlkm     IDENTICAL  
-wcd9xxx_dlkm           IDENTICAL  
-wcd_core_dlkm          IDENTICAL  
-wlan_firmware_service  IDENTICAL  
-wsa881x_analog_dlkm    IDENTICAL  
-SUMMARY: CLOSE=3, DIFFERENT=11, IDENTICAL=42, MISSING=1, total=57
+adsp_loader_dlkm            IDENTICAL  
+audio_pkt_dlkm              IDENTICAL  
+audio_prm_dlkm              IDENTICAL  
+audpkt_ion_dlkm             IDENTICAL  
+bolero_cdc_dlkm             IDENTICAL  
+bt_fm_slim                  CLOSE      funcs 30/31 same-size, exports =, imports -0/+0, strings -0/+0
+btpower                     IDENTICAL  
+camera                      DIFFERENT  funcs 1130/1240 same-size, exports !=, imports -20/+2, strings -150/+2
+cnss_nl                     IDENTICAL  
+cnss_prealloc               IDENTICAL  
+cnss_utils                  IDENTICAL  
+gpr_dlkm                    IDENTICAL  
+gsim                        IDENTICAL  
+hdcp_qseecom_dlkm           IDENTICAL  
+icnss2                      IDENTICAL  
+ipa_clientsm                IDENTICAL  
+ipam                        CLOSE      funcs 1549/1568 same-size, exports =, imports -0/+0, strings -0/+0
+ipanetm                     IDENTICAL  
+machine_dlkm                IDENTICAL  
+mbhc_dlkm                   IDENTICAL  
+msm_drm                     CLOSE      funcs 2658/2662 same-size, exports =, imports -0/+0, strings -0/+0
+msm_kgsl                    CLOSE      funcs 2146/2219 same-size, exports =, imports -0/+0, strings -0/+0
+msm_mmrm                    IDENTICAL  
+msm_video                   IDENTICAL  
+nxp_nci                     IDENTICAL  
+pinctrl_lpi_dlkm            IDENTICAL  
+q6_dlkm                     IDENTICAL  
+q6_notifier_dlkm            IDENTICAL  
+q6_pdr_dlkm                 IDENTICAL  
+qca_cld3_wlan               DIFFERENT  funcs 10410/12389 same-size, exports =, imports -10/+8, strings -1054/+2069
+qce50_dlkm                  IDENTICAL  
+qcedev_mod_dlkm             IDENTICAL  
+qcrypto_msm_dlkm            IDENTICAL  
+qrng_dlkm                   IDENTICAL  
+qseecom_dlkm                IDENTICAL  
+radio_i2c_rtc6226_qca       IDENTICAL  
+rmnet_core                  CLOSE      funcs 394/395 same-size, exports =, imports -0/+0, strings -0/+0
+rmnet_ctl                   IDENTICAL  
+rmnet_wlan                  IDENTICAL  
+rndisipam                   IDENTICAL  
+rx_macro_dlkm               IDENTICAL  
+smcinvoke_dlkm              IDENTICAL  
+snd_event_dlkm              IDENTICAL  
+spf_core_dlkm               IDENTICAL  
+stub_dlkm                   IDENTICAL  
+swr_ctrl_dlkm               IDENTICAL  
+swr_dlkm                    IDENTICAL  
+tx_macro_dlkm               IDENTICAL  
+tz_log_dlkm                 IDENTICAL  
+va_macro_dlkm               IDENTICAL  
+wcd937x_dlkm                IDENTICAL  
+wcd937x_slave_dlkm          IDENTICAL  
+wcd9xxx_dlkm                IDENTICAL  
+wcd_core_dlkm               IDENTICAL  
+wlan_firmware_service       IDENTICAL  
+wsa881x_analog_dlkm         IDENTICAL  
+SUMMARY: CLOSE=5, DIFFERENT=2, IDENTICAL=49, MISSING=1 (mmrm_test_module), total=57

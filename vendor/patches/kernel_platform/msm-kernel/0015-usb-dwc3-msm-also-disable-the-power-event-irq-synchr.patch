@@ -1,0 +1,29 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: yodaliu <yodaliu@gmail.com>
+Date: Fri, 27 Nov 2026 17:18:51 +0800
+Subject: [PATCH 15/15] usb: dwc3-msm: also disable the power event irq
+ synchronously on suspend
+
+dwc3_msm_suspend() calls disable_irq() on the power event irq right after
+disable_irq_nosync(), so the irq disable depth stays raised by one after
+resume.
+
+Reconstructed from the stock FiiO M21 FW 1.1.0 dwc3-msm module.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ drivers/usb/dwc3/dwc3-msm-core.c | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/drivers/usb/dwc3/dwc3-msm-core.c b/drivers/usb/dwc3/dwc3-msm-core.c
+index 89dc4d47ffc..80d6b2ba595 100644
+--- a/drivers/usb/dwc3/dwc3-msm-core.c
++++ b/drivers/usb/dwc3/dwc3-msm-core.c
+@@ -3933,6 +3933,7 @@ static int dwc3_msm_suspend(struct dwc3_msm *mdwc, bool force_power_collapse)
+ 
+ 	/* disable power event irq, hs and ss phy irq is used as wake up src */
+ 	disable_irq_nosync(mdwc->wakeup_irq[PWR_EVNT_IRQ].irq);
++	disable_irq(mdwc->wakeup_irq[PWR_EVNT_IRQ].irq);
+ 
+ 	dwc3_set_phy_speed_flags(mdwc);
+ 	/* Suspend HS PHY */

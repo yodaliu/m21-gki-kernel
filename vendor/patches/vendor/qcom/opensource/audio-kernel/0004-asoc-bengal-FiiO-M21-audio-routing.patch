@@ -1,0 +1,332 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: yodaliu <yodaliu@gmail.com>
+Date: Fri, 27 Nov 2026 12:55:32 +0800
+Subject: [PATCH 4/4] asoc: bengal: FiiO M21 audio routing
+
+- PRI MI2S RX plays to the FiiO DAC (fiio_codec / fiio HiFi, CPU DAI
+  fiio-snd-soc-dummy-dai); no WSA speaker amp on the RX DMA links.
+- WSA MI2S back ends use the primary port; with qcom,mi2s-master the SoC drives
+  the I2S clocks and MCLK_2 (24.576 MHz, 22.5792 MHz for 44.1 kHz rates) for the
+  WSA/VA primary MI2S streams.
+- qcom,wcd-disabled skips the WCD937x codec setup.
+- qcom,msm-spk-ext-pa: external speaker amp enable GPIO, switched by the
+  Ext_Spk_Switch mixer control.
+
+Reconstructed from the stock FiiO M21 FW 1.1.0 machine_dlkm; the rebuilt
+module matches it.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ asoc/bengal.c             | 81 ++++++++++++++++++++++++++++++++++++---
+ asoc/msm-audio-defs.h     |  4 +-
+ asoc/msm_bengal_dailink.h | 11 +++---
+ asoc/msm_common.c         | 43 ++++++++++++++++++++-
+ asoc/msm_common.h         |  1 +
+ 5 files changed, 126 insertions(+), 14 deletions(-)
+
+diff --git a/asoc/bengal.c b/asoc/bengal.c
+index d7b3ffee..dfcb0968 100644
+--- a/asoc/bengal.c
++++ b/asoc/bengal.c
+@@ -77,6 +77,7 @@ struct msm_asoc_mach_data {
+ 	struct device_node *hph_en0_gpio_p; /* used by pinctrl API */
+ 	struct device_node *fsa_handle;
+ 	u32 wsa_max_devs;
++	int wcd_disabled; /* qcom,wcd-disabled: no WCD937x codec */
+ };
+ 
+ static bool va_disable;
+@@ -293,6 +294,59 @@ static struct snd_info_entry *msm_snd_info_create_subdir(struct module *mod,
+         return entry;
+ }
+ 
++/* external speaker amplifier enable GPIO, switched by the "Ext_Spk_Switch" mixer control */
++static int ext_spk_gpio = -1;
++static int ext_spk_switch_value;
++static const char *const ext_spk_switch[] = {"Off", "On"};
++static const struct soc_enum ext_speaker_gpio_ctrl =
++	SOC_ENUM_SINGLE_EXT(ARRAY_SIZE(ext_spk_switch), ext_spk_switch);
++
++static int ext_spk_switch_get(struct snd_kcontrol *kcontrol,
++			      struct snd_ctl_elem_value *ucontrol)
++{
++	ucontrol->value.integer.value[0] = ext_spk_switch_value;
++	return 0;
++}
++
++static int ext_spk_switch_put(struct snd_kcontrol *kcontrol,
++			      struct snd_ctl_elem_value *ucontrol)
++{
++	ext_spk_switch_value = ucontrol->value.integer.value[0];
++	if (ext_spk_gpio < 0) {
++		pr_err("%s: get control external PA gpio failed\n", __func__);
++		return 0;
++	}
++	if (ext_spk_switch_value)
++		gpio_set_value(ext_spk_gpio, 1);
++	else
++		gpio_set_value(ext_spk_gpio, 0);
++	return 0;
++}
++
++static const struct snd_kcontrol_new msm_int_snd_controls[] = {
++	SOC_ENUM_EXT("Ext_Spk_Switch", ext_speaker_gpio_ctrl,
++		     ext_spk_switch_get, ext_spk_switch_put),
++};
++
++int is_ext_spk_gpio_support(struct platform_device *pdev)
++{
++	const char *spk_ext_pa = "qcom,msm-spk-ext-pa";
++
++	ext_spk_gpio = of_get_named_gpio(pdev->dev.of_node, spk_ext_pa, 0);
++	if (ext_spk_gpio < 0) {
++		dev_err(&pdev->dev, "%s: missing %s in dt node\n", __func__,
++			spk_ext_pa);
++		return -EINVAL;
++	}
++	if (!gpio_is_valid(ext_spk_gpio)) {
++		dev_err(&pdev->dev, "%s: Invalid external speaker gpio: %d",
++			__func__, ext_spk_gpio);
++		return -EINVAL;
++	}
++	gpio_request_one(ext_spk_gpio, GPIOF_OUT_INIT_LOW, "ext_spk_gpio");
++	return 0;
++}
++
+ static void *def_wcd_mbhc_cal(void)
+ {
+ 	void *wcd_mbhc_cal;
+@@ -1155,20 +1209,15 @@ static int msm_rx_tx_codec_init(struct snd_soc_pcm_runtime *rtd)
+ 	struct msm_asoc_mach_data *pdata =
+ 			snd_soc_card_get_drvdata(rtd->card);
+ 
+-	pr_err("%s:: enter \n", __func__);
+-
+ 	bolero_component = snd_soc_rtdcom_lookup(rtd, "bolero_codec");
+ 	if (!bolero_component) {
+ 		pr_err("%s: could not find component for bolero_codec\n",
+ 			__func__);
+ 		return -EINVAL;
+ 	}
+-	pr_err("%s:: bolero comp lookup done\n", __func__);
+-
+ 	dapm = snd_soc_component_get_dapm(bolero_component);
+ 	snd_soc_dapm_new_controls(dapm, msm_int_dapm_widgets,
+ 		ARRAY_SIZE(msm_int_dapm_widgets));
+-	pr_err("%s:: dapm new controls msm_int_dapm_widgets \n", __func__);
+ 
+ 	snd_soc_dapm_ignore_suspend(dapm, "Digital Mic0");
+ 	snd_soc_dapm_ignore_suspend(dapm, "Digital Mic1");
+@@ -1198,6 +1247,14 @@ static int msm_rx_tx_codec_init(struct snd_soc_pcm_runtime *rtd)
+ 	bolero_info_create_codec_entry(pdata->codec_root, bolero_component);
+ 	bolero_register_wake_irq(bolero_component, false);
+ 
++	if (pdata->wcd_disabled) {
++		bolero_set_port_map(bolero_component,
++			ARRAY_SIZE(sm_port_map),
++			sm_port_map);
++		codec_reg_done = true;
++		return 0;
++	}
++
+ 	component = snd_soc_rtdcom_lookup(rtd, WCD937X_DRV_NAME);
+ 	if (!component)
+ 		component = snd_soc_rtdcom_lookup(rtd, DRV_NAME);
+@@ -1207,6 +1264,13 @@ static int msm_rx_tx_codec_init(struct snd_soc_pcm_runtime *rtd)
+ 		return -EINVAL;
+ 	}
+ 
++	ret = snd_soc_add_component_controls(component, msm_int_snd_controls,
++					     ARRAY_SIZE(msm_int_snd_controls));
++	if (ret < 0) {
++		pr_err("%s: add_component_controls failed: %d\n", __func__, ret);
++		return ret;
++	}
++
+ 	dapm = snd_soc_component_get_dapm(component);
+ 	card = component->card->snd_card;
+ 
+@@ -1410,6 +1474,9 @@ static int msm_asoc_machine_probe(struct platform_device *pdev)
+ 	if (!pdata)
+ 		return -ENOMEM;
+ 
++	of_property_read_u32(pdev->dev.of_node, "qcom,wcd-disabled",
++			     &pdata->wcd_disabled);
++
+ 	card = populate_snd_card_dailinks(&pdev->dev);
+ 	if (!card) {
+ 		dev_err(&pdev->dev, "%s: Card uninitialized\n", __func__);
+@@ -1441,6 +1508,10 @@ static int msm_asoc_machine_probe(struct platform_device *pdev)
+ 		goto err;
+ 	}
+ 
++	if (is_ext_spk_gpio_support(pdev) < 0)
++		dev_err(&pdev->dev, "%s: doesn't support external speaker pa or codec is not wcd937x\n",
++			__func__);
++
+         /* Get maximum WSA device count for this platform */
+ 	ret = of_property_read_u32(pdev->dev.of_node,
+ 		"qcom,wsa-max-devs", &pdata->wsa_max_devs);
+diff --git a/asoc/msm-audio-defs.h b/asoc/msm-audio-defs.h
+index ba1029c4..5122f6f6 100644
+--- a/asoc/msm-audio-defs.h
++++ b/asoc/msm-audio-defs.h
+@@ -30,8 +30,8 @@
+ #ifdef CONFIG_MI2S_BOLERO_V2_1
+ #define LPASS_BE_PRI_MI2S_RX "MI2S-LPAIF_VA-RX-PRIMARY"
+ #define LPASS_BE_PRI_MI2S_TX "MI2S-LPAIF_VA-TX-PRIMARY"
+-#define LPASS_BE_SEC_MI2S_RX "MI2S-LPAIF_WSA-RX-SECONDARY"
+-#define LPASS_BE_SEC_MI2S_TX "MI2S-LPAIF_WSA-TX-SECONDARY"
++#define LPASS_BE_SEC_MI2S_RX "MI2S-LPAIF_WSA-RX-PRIMARY"
++#define LPASS_BE_SEC_MI2S_TX "MI2S-LPAIF_WSA-TX-PRIMARY"
+ #else
+ #define LPASS_BE_PRI_MI2S_RX "MI2S-LPAIF-RX-PRIMARY"
+ #define LPASS_BE_PRI_MI2S_TX "MI2S-LPAIF-TX-PRIMARY"
+diff --git a/asoc/msm_bengal_dailink.h b/asoc/msm_bengal_dailink.h
+index 229f084e..a8564beb 100644
+--- a/asoc/msm_bengal_dailink.h
++++ b/asoc/msm_bengal_dailink.h
+@@ -96,15 +96,13 @@ SND_SOC_DAILINK_DEFS(quat_auxpcm_tx,
+ SND_SOC_DAILINK_DEFS(rx_dma_rx0,
+ 	DAILINK_COMP_ARRAY(COMP_CPU("snd-soc-dummy-dai")),
+ 	DAILINK_COMP_ARRAY(COMP_CODEC("bolero-codec", "rx_macro_rx1"),
+-			   COMP_CODEC("wcd937x_codec", "wcd937x_cdc"),
+-			   COMP_CODEC("wsa-codec0", "wsa_rx0")),
++			   COMP_CODEC("wcd937x_codec", "wcd937x_cdc")),
+ 	DAILINK_COMP_ARRAY(COMP_PLATFORM("snd-soc-dummy")));
+ 
+ SND_SOC_DAILINK_DEFS(rx_dma_rx1,
+ 	DAILINK_COMP_ARRAY(COMP_CPU("snd-soc-dummy-dai")),
+ 	DAILINK_COMP_ARRAY(COMP_CODEC("bolero-codec", "rx_macro_rx2"),
+-			   COMP_CODEC("wcd937x_codec", "wcd937x_cdc"),
+-			   COMP_CODEC("wsa-codec0", "wsa_rx0")),
++			   COMP_CODEC("wcd937x_codec", "wcd937x_cdc")),
+ 	DAILINK_COMP_ARRAY(COMP_PLATFORM("snd-soc-dummy")));
+ 
+ SND_SOC_DAILINK_DEFS(rx_dma_rx2,
+@@ -169,8 +167,9 @@ SND_SOC_DAILINK_DEFS(proxy_rx,
+ 	DAILINK_COMP_ARRAY(COMP_PLATFORM("snd-soc-dummy")));
+ 
+ SND_SOC_DAILINK_DEFS(pri_mi2s_rx,
+-	DAILINK_COMP_ARRAY(COMP_CPU("snd-soc-dummy-dai")),
+-	DAILINK_COMP_ARRAY(COMP_CODEC("msm-stub-codec.1", "msm-stub-rx")),
++	DAILINK_COMP_ARRAY(COMP_CPU("fiio-snd-soc-dummy-dai")),
++	DAILINK_COMP_ARRAY(COMP_CODEC("fiio_codec", "fiio HiFi"),
++			   COMP_CODEC("msm-stub-codec.1", "msm-stub-rx")),
+ 	DAILINK_COMP_ARRAY(COMP_PLATFORM("snd-soc-dummy")));
+ 
+ SND_SOC_DAILINK_DEFS(pri_mi2s_tx,
+diff --git a/asoc/msm_common.c b/asoc/msm_common.c
+index 8fdb9609..9ec29b68 100644
+--- a/asoc/msm_common.c
++++ b/asoc/msm_common.c
+@@ -412,7 +412,10 @@ int msm_common_snd_hw_params(struct snd_pcm_substream *substream,
+ 	struct snd_soc_card *card = rtd->card;
+ 	struct msm_common_pdata *pdata = msm_common_get_pdata(card);
+ 	int index = get_mi2s_tdm_auxpcm_intf_index(stream_name);
+-	struct clk_cfg intf_clk_cfg;
++	struct clk_cfg intf_clk_cfg = {0};
++	struct clk_cfg mclk_cfg = {
++		CLOCK_ID_MCLK_2, 24576000, CLOCK_ATTRIBUTE_COUPLE_NO, CLOCK_ROOT_DEFAULT
++	};
+ 
+ 	dev_dbg(rtd->card->dev,
+ 		"%s: substream = %s  stream = %d\n",
+@@ -491,6 +494,9 @@ int msm_common_snd_hw_params(struct snd_pcm_substream *substream,
+ 						goto done;
+ 					}
+ 				}
++				/* the SoC drives the I2S clocks only in master mode */
++				if (!pdata->i2s_master)
++					goto inc;
+ 				pr_debug("%s: mi2s clk_id :%d clk freq %d\n", __func__,
+ 					intf_clk_cfg.clk_id, intf_clk_cfg.clk_freq_in_hz);
+ 				ret = audio_prm_set_lpass_clk_cfg(&intf_clk_cfg, 1);
+@@ -499,12 +505,27 @@ int msm_common_snd_hw_params(struct snd_pcm_substream *substream,
+ 						__func__, ret);
+ 					goto done;
+ 				}
++				if (strnstr(stream_name, "MI2S-LPAIF_WSA-RX-PRIMARY", strlen(stream_name)) ||
++				    strnstr(stream_name, "MI2S-LPAIF_WSA-TX-PRIMARY", strlen(stream_name)) ||
++				    strnstr(stream_name, "MI2S-LPAIF_VA-RX-PRIMARY", strlen(stream_name))) {
++					pr_err("enable MCLK1 Q6AFE_LPASS_CLK_ID_MCLK_2:%s\n", stream_name);
++					if (rate % 44100 == 0)
++						mclk_cfg.clk_freq_in_hz = 22579200;
++					ret = audio_prm_set_lpass_clk_cfg(&mclk_cfg, 1);
++					if (ret < 0)
++						pr_err("%s: prm lpass mi2s mclk cfg set 1 failed ret %d\n",
++							__func__, ret);
++					else
++						pr_err("%s: prm lpass mi2s mclk cfg set 1 success ret %d\n",
++							__func__, ret);
++				}
+ 			} else {
+ 				pr_err("%s: unsupported stream name: %s\n",
+ 					__func__, stream_name);
+ 				goto done;
+ 			}
+ 		}
++inc:
+ 		atomic_inc(&pdata->lpass_intf_clk_ref_cnt[index]);
+ done:
+ 		mutex_unlock(&pdata->lock[index]);
+@@ -560,6 +581,9 @@ void msm_common_snd_shutdown(struct snd_pcm_substream *substream)
+ 	const char *stream_name = rtd->dai_link->stream_name;
+ 	int index = get_mi2s_tdm_auxpcm_intf_index(stream_name);
+ 	struct clk_cfg intf_clk_cfg;
++	struct clk_cfg mclk_cfg = {
++		CLOCK_ID_MCLK_2, 24576000, CLOCK_ATTRIBUTE_COUPLE_NO, CLOCK_ROOT_DEFAULT
++	};
+ 	unsigned int rate = runtime->rate;
+ 
+ 	memset(&intf_clk_cfg, 0, sizeof(struct clk_cfg));
+@@ -587,6 +611,7 @@ void msm_common_snd_shutdown(struct snd_pcm_substream *substream)
+ 						__func__, ret);
+ 				}
+ 			} else if((strnstr(stream_name, "MI2S", strlen(stream_name)))) {
++				if (pdata->i2s_master) {
+ 				ret = get_mi2s_clk_id(index);
+ 				if (ret > 0) {
+ 					intf_clk_cfg.clk_id = ret;
+@@ -595,6 +620,19 @@ void msm_common_snd_shutdown(struct snd_pcm_substream *substream)
+ 						pr_err("%s: prm mi2s clk cfg disable failed ret %d\n",
+ 							__func__, ret);
+ 				}
++				if (strnstr(stream_name, "MI2S-LPAIF_WSA-RX-PRIMARY", strlen(stream_name)) ||
++				    strnstr(stream_name, "MI2S-LPAIF_WSA-TX-PRIMARY", strlen(stream_name)) ||
++				    strnstr(stream_name, "MI2S-LPAIF_VA-RX-PRIMARY", strlen(stream_name))) {
++					pr_err("disable MCLK1 Q6AFE_LPASS_CLK_ID_MCLK_2 : %s", stream_name);
++					ret = audio_prm_set_lpass_clk_cfg(&mclk_cfg, 0);
++					if (ret < 0)
++						pr_err("%s: prm lpass mi2s mclk cfg set 0 failed ret %d\n",
++							__func__, ret);
++					else
++						pr_err("%s: prm lpass mi2s mclk cfg set 0 success ret %d\n",
++							__func__, ret);
++				}
++				}
+ 			} else {
+ 				pr_err("%s: unsupported stream name: %s\n",
+ 					__func__, stream_name);
+@@ -759,6 +797,9 @@ int msm_common_snd_init(struct platform_device *pdev, struct snd_soc_card *card)
+ 		}
+ 	}
+ 
++	common_pdata->i2s_master = of_find_property(pdev->dev.of_node,
++					"qcom,mi2s-master", NULL) ? true : false;
++
+ 	common_pdata->mi2s_gpio_p[PRI_MI2S_TDM_AUXPCM] = of_parse_phandle(pdev->dev.of_node,
+ 			"qcom,pri-mi2s-gpios", 0);
+ 	common_pdata->mi2s_gpio_p[SEC_MI2S_TDM_AUXPCM] = of_parse_phandle(pdev->dev.of_node,
+diff --git a/asoc/msm_common.h b/asoc/msm_common.h
+index 5cf318a4..4fb9483e 100644
+--- a/asoc/msm_common.h
++++ b/asoc/msm_common.h
+@@ -56,6 +56,7 @@ struct msm_common_pdata {
+ 	uint32_t is_audio_hw_vote_required[MI2S_TDM_AUXPCM_MAX];
+ 	uint32_t tdm_clk_attribute[MI2S_TDM_AUXPCM_MAX];
+ 	uint32_t mi2s_clk_attribute[MI2S_TDM_AUXPCM_MAX];
++	bool i2s_master;
+ };
+ 
+ int snd_card_notify_user(snd_card_status_t card_status);

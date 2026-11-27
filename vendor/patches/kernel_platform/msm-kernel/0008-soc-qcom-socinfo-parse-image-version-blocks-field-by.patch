@@ -1,0 +1,230 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: yodaliu <yodaliu@gmail.com>
+Date: Fri, 27 Nov 2026 12:32:58 +0800
+Subject: [PATCH 08/15] soc: qcom: socinfo: parse image version blocks field by
+ field
+
+Adds quec_get_image_{crm,variant,}_version() helpers and uses them in the
+image_version/variant/crm_version and images sysfs getters.
+
+Reconstructed from the stock FiiO M21 FW 1.1.0 module by disassembly
+comparison; the rebuilt module matches the stock one.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ drivers/soc/qcom/socinfo.c | 144 ++++++++++++++++++++++++++++++++-----
+ 1 file changed, 126 insertions(+), 18 deletions(-)
+
+diff --git a/drivers/soc/qcom/socinfo.c b/drivers/soc/qcom/socinfo.c
+index bb5b4864806..6026d395692 100644
+--- a/drivers/soc/qcom/socinfo.c
++++ b/drivers/soc/qcom/socinfo.c
+@@ -1125,12 +1125,105 @@ static char *socinfo_get_image_version_base_address(void)
+ 			&size);
+ }
+ 
++/*
++ * Image version blocks hold "<crm>\0...\0<variant>\0...\0[:]<version>"; the
++ * helpers below copy one field into buf and return its length, or -1.
++ */
++int quec_get_image_crm_version(const char *string_address, char *buf,
++			       size_t buf_len)
++{
++	size_t crm_len;
++
++	if (!string_address || !buf || buf_len < 128) {
++		pr_err("%s : get error params\n", __func__);
++		return -1;
++	}
++
++	crm_len = strlen(string_address);
++	if (crm_len >= buf_len) {
++		pr_err("%s : the string_address is too big : crmLen = %lu ;crmVersionbufLen = %lu\n",
++		       __func__, crm_len, buf_len);
++		return -1;
++	}
++
++	strncpy(buf, string_address, crm_len);
++	return crm_len;
++}
++
++int quec_get_image_variant_version(const char *string_address, char *buf,
++				   size_t buf_len, size_t *variant_end_pos)
++{
++	char crm[128];
++	size_t pos, variant_len;
++
++	if (!string_address || !buf || buf_len < 128) {
++		pr_err("%s : get error params\n", __func__);
++		return -1;
++	}
++
++	pos = quec_get_image_crm_version(string_address, crm, sizeof(crm));
++	do {
++		pos++;
++	} while (!string_address[pos] && pos < 128);
++	if (pos >= 128) {
++		pr_err("%s : not get variant is too big : crmLen = %lu \n",
++		       __func__, pos);
++		return -1;
++	}
++
++	variant_len = strlen(string_address + pos);
++	strncpy(buf, string_address + pos, variant_len);
++	*variant_end_pos = variant_len + pos;
++	return variant_len;
++}
++
++int quec_get_image_version(const char *string_address, char *buf,
++			   size_t buf_len)
++{
++	char variant[128];
++	size_t variant_end_pos = 0, pos, version_len;
++	const char *version;
++	int variant_len;
++
++	if (!string_address || !buf || buf_len < 128) {
++		pr_err("%s : get error params\n", __func__);
++		return -1;
++	}
++
++	variant_len = quec_get_image_variant_version(string_address, variant,
++						     sizeof(variant), &variant_end_pos);
++	if (variant_end_pos >= 128) {
++		pr_err("%s : get image crm version failed: variantLen = %lu varianEndPos= %lu\n",
++		       __func__, (unsigned long)variant_len, variant_end_pos);
++		return -1;
++	}
++
++	pos = variant_end_pos;
++	do {
++		pos++;
++	} while (!string_address[pos] && pos < 128);
++	if (pos >= 128) {
++		pr_err("%s : not get variant is too big : varianEndPos = %lu \n",
++		       __func__, pos);
++		return -1;
++	}
++
++	version = string_address + pos;
++	if (*version == ':')
++		version++;
++	version_len = strlen(version);
++	strncpy(buf, version, version_len);
++	return version_len;
++}
++
+ static ssize_t
+ msm_get_image_version(struct device *dev,
+ 		struct device_attribute *attr,
+ 		char *buf)
+ {
+ 	char *string_address;
++	char crm_version[128] = {0};
++	int len;
+ 
+ 	string_address = socinfo_get_image_version_base_address();
+ 	if (IS_ERR_OR_NULL(string_address)) {
+@@ -1142,8 +1235,9 @@ msm_get_image_version(struct device *dev,
+ 	string_address +=
+ 		qsocinfo->current_image * SMEM_IMAGE_VERSION_SINGLE_BLOCK_SIZE;
+ 	up_read(&qsocinfo->current_image_rwsem);
+-	return scnprintf(buf, SMEM_IMAGE_VERSION_NAME_SIZE, "%-.75s\n",
+-			string_address);
++	len = quec_get_image_crm_version(string_address, crm_version,
++					 sizeof(crm_version));
++	return snprintf(buf, len + 3, "%s\r\n", crm_version);
+ }
+ 
+ static ssize_t
+@@ -1178,6 +1272,9 @@ msm_get_image_variant(struct device *dev,
+ 		char *buf)
+ {
+ 	char *string_address;
++	char variant[128] = {0};
++	size_t variant_end_pos = 0;
++	int len;
+ 
+ 	string_address = socinfo_get_image_version_base_address();
+ 	if (IS_ERR_OR_NULL(string_address)) {
+@@ -1190,9 +1287,9 @@ msm_get_image_variant(struct device *dev,
+ 	string_address +=
+ 		qsocinfo->current_image * SMEM_IMAGE_VERSION_SINGLE_BLOCK_SIZE;
+ 	up_read(&qsocinfo->current_image_rwsem);
+-	string_address += SMEM_IMAGE_VERSION_VARIANT_OFFSET;
+-	return scnprintf(buf, SMEM_IMAGE_VERSION_VARIANT_SIZE, "%-.20s\n",
+-			string_address);
++	len = quec_get_image_variant_version(string_address, variant,
++					     sizeof(variant), &variant_end_pos);
++	return snprintf(buf, len + 3, "%s\r\n", variant);
+ }
+ 
+ static ssize_t
+@@ -1228,19 +1325,20 @@ msm_get_image_crm_version(struct device *dev,
+ 		char *buf)
+ {
+ 	char *string_address;
++	char version[128] = {0};
++	int len;
+ 
+ 	string_address = socinfo_get_image_version_base_address();
+ 	if (IS_ERR_OR_NULL(string_address)) {
+ 		pr_err("Failed to get image version base address\n");
+-		return scnprintf(buf, SMEM_IMAGE_VERSION_OEM_SIZE, "Unknown");
++		return scnprintf(buf, SMEM_IMAGE_VERSION_OEM_SIZE - 1, "Unknown");
+ 	}
+ 	down_read(&qsocinfo->current_image_rwsem);
+ 	string_address +=
+ 		qsocinfo->current_image * SMEM_IMAGE_VERSION_SINGLE_BLOCK_SIZE;
+ 	up_read(&qsocinfo->current_image_rwsem);
+-	string_address += SMEM_IMAGE_VERSION_OEM_OFFSET;
+-	return scnprintf(buf, SMEM_IMAGE_VERSION_OEM_SIZE, "%-.33s\n",
+-			string_address);
++	len = quec_get_image_version(string_address, version, sizeof(version));
++	return snprintf(buf, len + 2, "%s\n", version);
+ }
+ 
+ static ssize_t
+@@ -1310,6 +1408,10 @@ msm_get_images(struct device *dev,
+ 	int pos = 0;
+ 	int image;
+ 	char *image_address;
++	size_t variant_end_pos = 0;
++	char crm_version[128] = {0};
++	char variant[128] = {0};
++	char version[128] = {0};
+ 
+ 	image_address = socinfo_get_image_version_base_address();
+ 	if (IS_ERR_OR_NULL(image_address))
+@@ -1322,16 +1424,22 @@ msm_get_images(struct device *dev,
+ 			continue;
+ 		}
+ 
+-		pos += scnprintf(buf + pos, PAGE_SIZE - pos, "%d:\n",
++		pos += snprintf(buf + pos, PAGE_SIZE - pos, "%d:\n",
+ 				image);
+-		pos += scnprintf(buf + pos, PAGE_SIZE - pos,
+-				"\tCRM:\t\t%-.75s\n", image_address);
+-		pos += scnprintf(buf + pos, PAGE_SIZE - pos,
+-				"\tVariant:\t%-.20s\n",
+-				image_address + SMEM_IMAGE_VERSION_VARIANT_OFFSET);
+-		pos += scnprintf(buf + pos, PAGE_SIZE - pos,
+-				"\tVersion:\t%-.33s\n",
+-				image_address + SMEM_IMAGE_VERSION_OEM_OFFSET);
++		memset(crm_version, 0, sizeof(crm_version));
++		quec_get_image_crm_version(image_address, crm_version,
++					   sizeof(crm_version));
++		pos += snprintf(buf + pos, PAGE_SIZE - pos,
++				"\tCRM:\t\t%s\n", crm_version);
++		memset(variant, 0, sizeof(variant));
++		quec_get_image_variant_version(image_address, variant,
++					       sizeof(variant), &variant_end_pos);
++		pos += snprintf(buf + pos, PAGE_SIZE - pos,
++				"\tVariant:\t%s\n", variant);
++		memset(version, 0, sizeof(version));
++		quec_get_image_version(image_address, version, sizeof(version));
++		pos += snprintf(buf + pos, PAGE_SIZE - pos,
++				"\tVersion:\t%s\n", version);
+ 
+ 		image_address += SMEM_IMAGE_VERSION_SINGLE_BLOCK_SIZE;
+ 	}
