@@ -1,0 +1,4 @@
+ccflags-y += -I$(src)/../../include
+obj-m += fiio_gpio_key.o
+obj-m += fiio_sw_hold.o
+obj-m += fiio_externel_key.o

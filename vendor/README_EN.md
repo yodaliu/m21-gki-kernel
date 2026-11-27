@@ -61,6 +61,11 @@ Verdicts:
 - `mmrm_test_module` is not built because its source is not public.
 - qcacld is built with `TARGET_BUILD_VARIANT=user` and `WLAN_CTRL_NAME=wlan`, like stock: the user build drops crash inject, pktlog and TX descriptor dup detection, and `WLAN_CTRL_NAME` adds the `qcwlanstate` char device the framework uses to switch Wi-Fi on and off.
 - msm_drm imports `fiio_device_register` and `fiio_device_get_data_by_name` from the FiiO private module `fiio_primary_modules`. `symvers/fiio-private.symvers` holds their export CRCs (ABI metadata only) and is passed in `KBUILD_EXTRA_SYMBOLS`, so msm_drm records the same CRCs as stock.
+- The `techpacks` step ends by building `fiio-modules`, rewritten from Ghidra decompilation and the stock DWARF: 16 modules in one Kbuild pass (shared headers in `include/fiio/`), so the others resolve their imports from `fiio_primary_modules` directly:
+  - `fiio_primary_modules` (9 .c files);
+  - the 4 debug/test modules (`fiio_adc_debug_module`, `fiio_gpio_debug_module`, `fiio_uart_debug_module`, `spi_test_driver`);
+  - extcon-quec, fiio_snd_soc_dummy_dai, fiio_gpio_key, fiio_sw_hold, fiio_externel_key, lcd_id, ts_core, fiio_wakeup, led, fiio_underlay_modules and fiio_config.
+- All export CRCs of the reconstructed modules match stock (46 in `fiio_primary_modules`, plus ts_core, fiio_sw_hold, fiio_underlay_modules, fiio_config and others). genksyms CRCs depend on which headers each .c includes, so the `#include` lists were tuned against the stock CRCs (for example `dac_dai.h` uses `sound/asound.h`, not `sound/pcm.h`).
 
 ## Results
 
@@ -69,7 +74,8 @@ Verdicts:
 | msm-kernel in-tree | 218 | 216 | 2 | 0 | 0 |
 | techpacks | 57 | 49 | 6 | 1 | 1 |
 | Qualcomm total | 275 | 265 (96%) | 8 | 1 | 1 |
-| FiiO/Quectel private | 36 | no public source | | | |
+| FiiO/Quectel reverse-engineered (`fiio-modules/`) | 16 | 16 | 0 | 0 | 0 |
+| FiiO/Quectel private (rest) | 20 | no public source | | | |
 
 **In-tree FiiO/Quectel changes, reconstructed** (patches 0007–0015):
 
@@ -108,7 +114,7 @@ Each remaining CLOSE module was checked by disassembly:
 - bt_fm_slim: stock has one extra empty function, `btfm_slim_get_hwep_details` (just `ret`, not exported), that the public source lacks.
 - msm_drm: `dsi_panel_power_on` differs only in register allocation.
 
-**CRC and load-order check** (`results/crc-verify.txt`): the 274 rebuilt modules were swapped into the full stock partition trees (420 files) and checked with `scripts/verify-all-modules.py` against the 5.15.220-m21 `vmlinux.symvers`.
+**CRC and load-order check** (`results/crc-verify.txt`): the 290 rebuilt modules (274 Qualcomm + 16 reconstructed FiiO) were swapped into the full stock partition trees (452 files) and checked with `scripts/verify-all-modules.py` against the 5.15.220-m21 `vmlinux.symvers`.
 
 - Stock passes.
 - With the rebuilt modules there are **0 CRC mismatches** (23,075 kernel and 2,431 inter-module references resolved; no import lacks a version record).

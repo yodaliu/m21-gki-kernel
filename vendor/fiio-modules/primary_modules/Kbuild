@@ -1,0 +1,5 @@
+# FiiO shared helper module reconstructed from the stock FW 1.1.0 binary
+ccflags-y += -I$(src)/../include
+obj-m += fiio_primary_modules.o
+fiio_primary_modules-y := fiio_primary.o fiio_params.o fiio_device.o fiio_notify.o \
+	fiio_utils.o fiio_utils_attrs.o fiio_utils_dac.o fiio_utils_ts.o fiio_i2c.o

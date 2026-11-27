@@ -1,0 +1,3 @@
+ccflags-y += -I$(src)/../include
+obj-m += fiio_underlay_modules.o
+fiio_underlay_modules-y := fiio_underlay.o fiio_attr.o fiio_load.o

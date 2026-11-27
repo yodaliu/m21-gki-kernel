@@ -1,0 +1,3 @@
+obj-m += extcon-quec.o
+# stock was built in-tree as drivers/extcon/extcon-quec.c; its __FILE__ strings use that path
+CFLAGS_extcon-quec.o += -fmacro-prefix-map=$(src)/=drivers/extcon/

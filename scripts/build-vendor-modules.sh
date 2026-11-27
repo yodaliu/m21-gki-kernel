@@ -142,6 +142,10 @@ build_techpacks() {
      KBUILD_EXTRA_SYMBOLS="$(sym datarmnet/core)"
   tp nfc "$VWORK/vendor/nxp/opensource/driver" NFC_ROOT="$VWORK/vendor/nxp/opensource/driver" CONFIG_NXP_NFC_I2C=m \
      KBUILD_EXTRA_SYMBOLS="$(sym securemsm-kernel)"
+  # FiiO/Quectel modules reconstructed from the stock binaries (vendor/fiio-modules), built out of
+  # the repo in one pass, so the others resolve their imports from fiio_primary_modules
+  rm -rf "$VWORK/fiio-modules"; cp -r "$HERE/vendor/fiio-modules" "$VWORK/fiio-modules"
+  tp fiio "$VWORK/fiio-modules"
 }
 
 case $STAGE in
@@ -152,7 +156,7 @@ case $STAGE in
 esac
 
 rm -rf "$VDIST"; mkdir -p "$VDIST"
-find "$VOUT/kernel" "$V" "$VWORK/vendor/nxp" -name '*.ko' -exec cp {} "$VDIST/" \;
+find "$VOUT/kernel" "$V" "$VWORK/vendor/nxp" "$VWORK/fiio-modules" -name '*.ko' -exec cp {} "$VDIST/" \;
 # file names as shipped on the device
 [ -f "$VDIST/wlan.ko" ] && mv "$VDIST/wlan.ko" "$VDIST/qca_cld3_wlan.ko"
 echo "dist: $(ls "$VDIST" | wc -l) modules in $VDIST"

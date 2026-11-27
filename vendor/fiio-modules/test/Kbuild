@@ -1,0 +1,9 @@
+# FiiO debug/test modules reconstructed from the stock FW 1.1.0 binaries
+ccflags-y += -I$(src)/../include
+obj-m += fiio_adc_debug_module.o
+obj-m += fiio_gpio_debug_module.o
+obj-m += fiio_uart_debug_module.o
+obj-m += spi_test_driver.o
+# get_gpio_by_name() checks the address of the name array, as stock does
+CFLAGS_fiio_adc_debug_module.o += -Wno-pointer-bool-conversion
+CFLAGS_fiio_gpio_debug_module.o += -Wno-pointer-bool-conversion

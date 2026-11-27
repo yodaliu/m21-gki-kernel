@@ -1,0 +1,1 @@
+obj-m += fiio_snd_soc_dummy_dai.o

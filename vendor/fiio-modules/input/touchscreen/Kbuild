@@ -1,0 +1,3 @@
+ccflags-y += -I$(src)/../../include
+obj-m += lcd_id.o
+obj-m += ts_core.o
