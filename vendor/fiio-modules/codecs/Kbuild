@@ -1,1 +1,5 @@
+ccflags-y += -I$(src)/../include
 obj-m += fiio_snd_soc_dummy_dai.o
+obj-m += cs43198.o
+obj-m += dac_core_module.o
+dac_core_module-objs := dac_core.o

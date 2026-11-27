@@ -1,5 +1,5 @@
-# 290 rebuilt modules (274 Qualcomm + 16 FiiO reconstructed) swapped into the stock vendor_boot/vendor_dlkm/system_dlkm trees (452 files)
-# not replaced: mmrm_test_module + 20 FiiO/Quectel private modules (stock binaries)
+# 297 rebuilt modules (274 Qualcomm + 23 FiiO reconstructed) swapped into the stock vendor_boot/vendor_dlkm/system_dlkm trees (466 files)
+# not replaced: mmrm_test_module + 13 FiiO/Quectel private modules (stock binaries)
 
 vendor_boot :  259 .ko
 vendor_dlkm :  227 .ko

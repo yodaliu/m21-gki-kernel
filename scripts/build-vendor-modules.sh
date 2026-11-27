@@ -145,6 +145,13 @@ build_techpacks() {
   # FiiO/Quectel modules reconstructed from the stock binaries (vendor/fiio-modules), built out of
   # the repo in one pass, so the others resolve their imports from fiio_primary_modules
   rm -rf "$VWORK/fiio-modules"; cp -r "$HERE/vendor/fiio-modules" "$VWORK/fiio-modules"
+  # the FPGA bitstream is FiiO firmware: the repo has a placeholder, the real bytes come from the local stock module
+  gwko=$(find "$VWORK/stock/" -name gw-fpga.ko 2>/dev/null | head -1)
+  if [ -n "$gwko" ]; then
+    python3 "$HERE/scripts/extract-gw-fpga-firmware.py" "$gwko" "$VWORK/fiio-modules/fpga/gowin/gw_fpga_firmware.h"
+  else
+    echo "warning: no stock gw-fpga.ko under $VWORK/stock, building gw-fpga with a zero FPGA bitstream" >&2
+  fi
   tp fiio "$VWORK/fiio-modules"
 }
 

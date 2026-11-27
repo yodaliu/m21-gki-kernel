@@ -1,2 +1,3 @@
 ccflags-y += -I$(src)/../include
 obj-m += fiio_wakeup.o
+obj-m += fiio_headset_jack.o

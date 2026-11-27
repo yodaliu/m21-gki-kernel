@@ -1,0 +1,4 @@
+ccflags-y += -I$(src)/../include
+obj-m += gowin/
+obj-m += fpga_interface.o
+obj-m += fpga_audio_interface.o

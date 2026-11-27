@@ -1,0 +1,4 @@
+ccflags-y += -I$(src)/../../include
+# stock passes PAGE_SIZE as the snprintf size of a 20-byte buffer
+CFLAGS_gw-fpga.o += -Wno-fortify-source
+obj-m += gw-fpga.o
