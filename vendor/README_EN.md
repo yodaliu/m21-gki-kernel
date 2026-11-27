@@ -47,6 +47,7 @@ Verdicts:
 **Techpacks** come from manifest `AU_LINUX_ANDROID_LA.VENDOR.13.2.0.R1.11.00.00.925.127`.
 
 - Projects that manifest does not list (audio, graphics, display, camera, video) use the newest commit before 2023-02-01 on the branch named in `SOURCES`.
+- qcacld-3.0 and qca-wifi-host-cmn: stock reports version `2.0.9.15N`, which is "Release 2.0.9.15N" (cabc600, 2023-01-17) on `wlan-cld3.driver.lnx.2.0.9.r1-rel`; cmn is the last commit before it on `wlan-cmn.driver.lnx.2.0.9.r1-rel` (509b149).
 - graphics is pinned to `aa5e1f9` (2023-01-16), chosen by scoring the branch history on symbols stock has and lacks.
 - `patches/vendor/qcom/opensource/<techpack>/` reverts upstream commits stock lacks, cherry-picks ones it has (original authors kept), and adds the reconstructed FiiO changes.
 
@@ -58,6 +59,7 @@ Verdicts:
 - `KCFLAGS=-D__ANDROID_COMMON_KERNEL__`, as in Qualcomm's `build.config.common`.
 - Techpack Kbuild files are re-indented and their bare `export` lines dropped, so GNU make 4.4 can parse them.
 - `mmrm_test_module` is not built because its source is not public.
+- qcacld is built with `TARGET_BUILD_VARIANT=user` and `WLAN_CTRL_NAME=wlan`, like stock: the user build drops crash inject, pktlog and TX descriptor dup detection, and `WLAN_CTRL_NAME` adds the `qcwlanstate` char device the framework uses to switch Wi-Fi on and off.
 - msm_drm imports `fiio_device_register` and `fiio_device_get_data_by_name` from the FiiO private module `fiio_primary_modules`. `symvers/fiio-private.symvers` holds their export CRCs (ABI metadata only) and is passed in `KBUILD_EXTRA_SYMBOLS`, so msm_drm records the same CRCs as stock.
 
 ## Results
@@ -65,8 +67,8 @@ Verdicts:
 | Set | Modules | IDENTICAL | CLOSE | DIFFERENT | MISSING |
 |---|---:|---:|---:|---:|---:|
 | msm-kernel in-tree | 218 | 216 | 2 | 0 | 0 |
-| techpacks | 57 | 49 | 5 | 2 | 1 |
-| Qualcomm total | 275 | 265 (96%) | 7 | 2 | 1 |
+| techpacks | 57 | 49 | 6 | 1 | 1 |
+| Qualcomm total | 275 | 265 (96%) | 8 | 1 | 1 |
 | FiiO/Quectel private | 36 | no public source | | | |
 
 **In-tree FiiO/Quectel changes, reconstructed** (patches 0007–0015):
@@ -92,16 +94,16 @@ The other two CLOSE modules: socinfo (error branches of `quec_get_image_version`
 | audio-kernel | revert 82ba6ff (snd card standby state) and 92a2717 (ion free lock); FiiO: on an APM close-all timeout, drop the fd list with `msm_audio_ion_free_fd_data()` instead of unmapping buffers the ADSP may still use; bengal machine driver routing (PRI MI2S RX to `fiio_codec`, SoC-driven I2S clocks and MCLK_2 with `qcom,mi2s-master`, `qcom,wcd-disabled`, external speaker GPIO and `Ext_Spk_Switch`) | all 26 IDENTICAL |
 | securemsm-kernel | revert b5f2395 (qseecom 32-bit compat) | all IDENTICAL |
 | graphics-kernel | upstream 4d87657 (deferred_destroy NULL fix), revert 085a050 | msm_kgsl CLOSE (CFI jump-table numbering only) |
+| qcacld-3.0 | upstream 5a1d5c8 (ignore CSA to an invalid channel) and f0b7c74 (11BE AP connect fix); FiiO/Quectel: stop the RSO stop timer only on HO_FAILED or a successful RSO_STATUS (notif_params 0), with a log; log notif_params in roam events; a roam start in ROAMING_IN_PROG is not an error; `read_mac_addr_from_mac_file` defaults to 1 (MAC address from the mac file) | qca_cld3_wlan CLOSE (CFI jump-table numbering only) |
 | display-drivers | revert 5d6cec2 (stock keeps these error logs), revert a551760 (stock's rotator does not set `DMA_ATTR_SKIP_CPU_SYNC`); FiiO: in-cell touch reset `qcom,platform-tp-reset-gpio`, keep reset/disp_en on at power off during gesture wake-up, look up the touch driver's `ts module` data through `fiio_device_register` | msm_drm CLOSE (register allocation in `dsi_panel_power_on`) |
 
 **Not reconstructed:**
 
 - **camera:** stock compiles Quectel's private aw95016/CCI driver code into camera.ko (about 60 functions, importing `quectel_*`). That is private-driver code, so it is left alone.
-- **qca_cld3_wlan:** stock is a much older qcacld branch (`blm`, `csr_roam`; about 1,000 functions differ). It needs qcacld, cmn and fw-api re-pinned together.
 
 Each remaining CLOSE module was checked by disassembly:
 
-- ipam, msm_kgsl: only the numbers in CFI jump-table names (`name.NNNN_jt`) differ; all sizes match.
+- ipam, msm_kgsl, qca_cld3_wlan: only the numbers in CFI jump-table names (`name.NNNN_jt`) differ; all sizes match.
 - rmnet_core: all function sizes match; the count comes from how the compare tool handles same-name static functions.
 - bt_fm_slim: stock has one extra empty function, `btfm_slim_get_hwep_details` (just `ret`, not exported), that the public source lacks.
 - msm_drm: `dsi_panel_power_on` differs only in register allocation.
@@ -109,9 +111,9 @@ Each remaining CLOSE module was checked by disassembly:
 **CRC and load-order check** (`results/crc-verify.txt`): the 274 rebuilt modules were swapped into the full stock partition trees (420 files) and checked with `scripts/verify-all-modules.py` against the 5.15.220-m21 `vmlinux.symvers`.
 
 - Stock passes.
-- With the rebuilt modules there are **0 CRC mismatches** (23,070 kernel and 2,434 inter-module references resolved; no import lacks a version record).
-- The only errors are 4 load-order errors in qca_cld3_wlan. The pinned qcacld is newer than stock and imports `qcom_va_md_*`, whose provider the stock load order does not guarantee.
+- With the rebuilt modules there are **0 CRC mismatches** (23,075 kernel and 2,431 inter-module references resolved; no import lacks a version record).
+- There are **0 errors**, load order included. The 4 qca_cld3_wlan load-order errors (`qcom_va_md_*` imports of the newer qcacld) went away with the stock-matching pin.
 
 This is a static ABI and metadata check. It does not test probing or behaviour on hardware.
 
-Do **not** install the rebuilt modules on the device. The FiiO changes are rewritten from decompilation and untested on hardware, camera and qca_cld3_wlan still differ from stock, and these builds are for comparison only.
+Do **not** install the rebuilt modules on the device. The FiiO changes are rewritten from decompilation and untested on hardware, camera still differs from stock, and these builds are for comparison only.

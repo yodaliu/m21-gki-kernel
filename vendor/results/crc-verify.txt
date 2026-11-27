@@ -4,13 +4,9 @@ system_dlkm :    2 .ko
 module identities: 311
 
 ===== /home/yodaliu/out-m21/vmlinux.symvers =====
-counts: {"crc_refs_resolved_by_kernel": 23070, "crc_refs_resolved_by_modules": 2434, "error_categories": {"stage_modinfo_dependency_not_deployed": 1, "stage_symbol_unavailable": 3}, "errors": 4, "imports_without_crc_verification": 0, "intree_exports_ignored": 0, "module_files": 488, "module_identities": 311, "unresolved_optional_weak_imports": 0, "version_references": 25504, "vmlinux_exports": 15477, "warning_categories": {}, "warnings": 0}
+counts: {"crc_refs_resolved_by_kernel": 23075, "crc_refs_resolved_by_modules": 2431, "error_categories": {}, "errors": 0, "imports_without_crc_verification": 0, "intree_exports_ignored": 0, "module_files": 488, "module_identities": 311, "unresolved_optional_weak_imports": 0, "version_references": 25506, "vmlinux_exports": 15477, "warning_categories": {}, "warnings": 0}
 stages: vendor_boot=84, vendor_dlkm=224, system_dlkm=2
-  ERROR stage_modinfo_dependency_not_deployed: swapfull/vendor_dlkm/lib/modules/qca_cld3_wlan.ko  .modinfo dependency is not guaranteed by deployed hard dependencies/baseline; it was NOT auto-loaded
-  ERROR stage_symbol_unavailable: swapfull/vendor_dlkm/lib/modules/qca_cld3_wlan.ko qcom_va_md_register strong import has no guaranteed provider before this insmod; other parallel loads and optional softdeps are not proof
-  ERROR stage_symbol_unavailable: swapfull/vendor_dlkm/lib/modules/qca_cld3_wlan.ko qcom_va_md_unregister strong import has no guaranteed provider before this insmod; other parallel loads and optional softdeps are not proof
-  ERROR stage_symbol_unavailable: swapfull/vendor_dlkm/lib/modules/qca_cld3_wlan.ko qcom_va_md_add_region strong import has no guaranteed provider before this insmod; other parallel loads and optional softdeps are not proof
-RESULT: FAIL
+RESULT: PASS
 
-OVERALL: FAIL (exit 1)
+OVERALL: PASS (exit 0)
 Scope: static ABI/metadata and stage availability; NOT a boot/probe or hardware test.

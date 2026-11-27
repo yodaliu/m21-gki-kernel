@@ -62,7 +62,8 @@ clang 產生的 `.cfi`、`.llvm.N` 等編譯器符號不列入比較。字串裡
   - 依據：逐一建置候選 tag，比較完全相同的樹內模組數。r12-01500 有 206/218 相同（先前用的 r1-08500 只有 192）。
   - 原廠另外帶了 r12-01500 之後的 6 個上游 commit（gcc-khaje SDCC floor ops、4 個 WALT commit、dwc3 core 標為 syscore 裝置 f4a82a39），以原作者資訊收在 `patches/`。
   - 其餘差異是 FiiO/Quectel 的修改：用反組譯比對還原成原始碼 patch，重建後與原廠一致（見下方）。
-- 以下 techpack 取自 manifest `AU_LINUX_ANDROID_LA.VENDOR.13.2.0.R1.11.00.00.925.127`：securemsm、mmrm、wlan、bt、dataipa、datarmnet、nfc。
+- 以下 techpack 取自 manifest `AU_LINUX_ANDROID_LA.VENDOR.13.2.0.R1.11.00.00.925.127`：securemsm、mmrm、wlan platform、fw-api、bt、dataipa、datarmnet、nfc。
+- qcacld-3.0 與 qca-wifi-host-cmn：原廠模組內的版本字串是 `2.0.9.15N`，對應 `wlan-cld3.driver.lnx.2.0.9.r1-rel` 分支的「Release 2.0.9.15N」（cabc600，2023-01-17）；cmn 取 `wlan-cmn.driver.lnx.2.0.9.r1-rel` 上在它之前的最後一個 commit（509b149）。
 - manifest 裡沒有的 techpack（audio、graphics、display、camera、video），取各分支在 2023-02-01 之前最新的 commit（`SOURCES` 內有註明分支）。
   - graphics 改釘 `aa5e1f9`（2023-01-16）：在分支歷史中逐一比對原廠有／沒有的符號選出。
   - 原廠沒有、但釘選版本有的上游 commit 用 revert patch 拿掉；原廠有、但釘選版本沒有的用 cherry-pick patch 補上（保留原作者）。
@@ -79,6 +80,7 @@ clang 產生的 `.cfi`、`.llvm.N` 等編譯器符號不列入比較。字串裡
   - 改成空白縮排；
   - 刪掉單獨的 `export`。audio 的每個子目錄都會自己 include `config/*.conf`，所以刪掉不影響結果。
 - `mmrm-driver/test/`（mmrm_test_module）的原始碼沒有公開，只建置 driver。
+- qcacld 以 `TARGET_BUILD_VARIANT=user` 和 `WLAN_CTRL_NAME=wlan` 建置，與原廠相同：user build 不含 crash inject、pktlog、TX descriptor 重複偵測等除錯功能；`WLAN_CTRL_NAME` 會加入 framework 用來開關 Wi-Fi 的 `qcwlanstate` 字元裝置。
 - msm-kernel 的 `scripts/extract-cert.c` 套用 `patches/0001`，讓主機工具能用 OpenSSL 3 建置。
 - `build-vendor-modules.sh` 會把 `vendor/patches/<路徑>/` 的 patch 依序套到該 checkout 的工作目錄；已套用過就跳過。
 - msm_drm 導入 FiiO 私有模組的 `fiio_device_register`、`fiio_device_get_data_by_name`。建置時以 `KBUILD_EXTRA_SYMBOLS` 帶入 `symvers/fiio-private.symvers`，讓 msm_drm 記錄與原廠相同的 CRC。
@@ -88,8 +90,8 @@ clang 產生的 `.cfi`、`.llvm.N` 等編譯器符號不列入比較。字串裡
 | 類別 | 模組數 | IDENTICAL | CLOSE | DIFFERENT | MISSING |
 |---|---:|---:|---:|---:|---:|
 | msm-kernel 樹內 | 218 | 216 | 2 | 0 | 0 |
-| techpack | 57 | 49 | 5 | 2 | 1 |
-| 合計 Qualcomm | 275 | 265 (96%) | 7 | 2 | 1 |
+| techpack | 57 | 49 | 6 | 1 | 1 |
+| 合計 Qualcomm | 275 | 265 (96%) | 8 | 1 | 1 |
 | FiiO/Quectel 私有 | 36 | — | — | — | 無公開原始碼 |
 
 ### 不一致的原因
@@ -117,6 +119,7 @@ clang 產生的 `.cfi`、`.llvm.N` 等編譯器符號不列入比較。字串裡
 | audio-kernel | revert 82ba6ff（snd card standby 狀態）、revert 92a2717（ion free 加鎖）；FiiO：APM close-all 逾時時改用 `msm_audio_ion_free_fd_data()`，不 unmap ADSP 可能仍在用的 buffer；bengal machine driver 的 FiiO 音訊路由（PRI MI2S RX 接 `fiio_codec`、`qcom,mi2s-master` 時由 SoC 送出 I2S 時脈與 MCLK_2、`qcom,wcd-disabled`、外接喇叭 GPIO 與 `Ext_Spk_Switch` 控制項） | 26 個模組全部 IDENTICAL |
 | securemsm-kernel | revert b5f2395（qseecom 32 位元 compat） | 全部 IDENTICAL |
 | graphics-kernel | 上游 4d87657（deferred_destroy 空指標修正）、revert 085a050 | msm_kgsl CLOSE（只差 CFI jump table 的編號） |
+| qcacld-3.0 | 上游 5a1d5c8（無效頻道的 CSA 改為忽略）、f0b7c74（11BE AP 連線修正）；FiiO/Quectel：RSO stop timer 只在 HO_FAILED 或 RSO_STATUS 成功（notif_params 為 0）時停止並印出 log、漫遊事件 log 加印 notif_params、ROAMING_IN_PROG 時再收到 roam start 不視為錯誤、`read_mac_addr_from_mac_file` 預設改為 1（從 mac 檔讀取 MAC 位址） | qca_cld3_wlan CLOSE（只差 CFI jump table 的編號） |
 | display-drivers | revert 5d6cec2（原廠仍保留這些錯誤 log）、revert a551760（原廠 rotator 不設 `DMA_ATTR_SKIP_CPU_SYNC`）；FiiO：in-cell 觸控面板的 `qcom,platform-tp-reset-gpio` 重置、手勢喚醒時關機不關 reset/disp_en、透過 `fiio_device_register` 取得觸控驅動的 `ts module` 資料 | msm_drm CLOSE（只差 `dsi_panel_power_on` 的暫存器配置） |
 
 **沒有還原的模組**：
@@ -124,11 +127,10 @@ clang 產生的 `.cfi`、`.llvm.N` 等編譯器符號不列入比較。字串裡
 | 模組 | 原因 |
 |---|---|
 | camera | 原廠把 Quectel 私有的 aw95016／CCI 驅動程式碼編進 camera.ko（約 60 個函式，並導入 `quectel_*` 符號）。這屬於私有驅動，依原則不還原。 |
-| qca_cld3_wlan | 原廠是更舊的 qcacld 分支（`blm`、`csr_roam` 等，約 1,000 個函式不同），需要另外重新釘選 qcacld、cmn、fw-api 三個倉庫。 |
 
 剩下 CLOSE 的模組都已逐一比對反組譯：
 
-- ipam、msm_kgsl：只差 CFI jump table 名稱裡的編號（`name.NNNN_jt`），大小全部相同。
+- ipam、msm_kgsl、qca_cld3_wlan：只差 CFI jump table 名稱裡的編號（`name.NNNN_jt`），大小全部相同。
 - rmnet_core：所有函式大小相同，只是比對工具對同名 static 函式的計數方式造成。
 - bt_fm_slim：原廠多一個空函式 `btfm_slim_get_hwep_details`（只有 `ret`，沒有導出），公開原始碼沒有。
 - msm_drm：`dsi_panel_power_on` 只差暫存器配置。
@@ -141,12 +143,12 @@ clang 產生的 `.cfi`、`.llvm.N` 等編譯器符號不列入比較。字串裡
 
 - 原廠模組（基準）：PASS。
 - 換入重建模組後：
-  - **0 個 CRC 不符**，共解析 23,070 個 kernel 符號參照與 2,434 個模組間參照，沒有缺少版本記錄的導入。
-  - 只剩 qca_cld3_wlan 的 4 個載入順序錯誤：釘選的 qcacld 比原廠新，多導入了 `qcom_va_md_*`（minidump），原廠的載入順序不保證先載入它的提供者。
+  - **0 個 CRC 不符**，共解析 23,075 個 kernel 符號參照與 2,431 個模組間參照，沒有缺少版本記錄的導入。
+  - **0 個錯誤**，包括載入順序檢查（先前 qcacld 釘選得比原廠新，多導入 `qcom_va_md_*`，造成 4 個載入順序錯誤；改釘原廠版本後已消失）。
 
 這只是靜態的 ABI 與中繼資料檢查，不代表模組在硬體上能正常 probe 或運作。
 
 ### 限制
 
 - 36 個 FiiO/Quectel 私有模組無法從公開原始碼重建，例如 FPGA、DAC、充電、按鍵、觸控、`fiio_*`。這些模組只能保留原廠 binary，或用 Ghidra 做部分逆向。
-- 還原的 FiiO 修改是依反編譯結果重寫的，沒有在硬體上驗證；camera 與 qca_cld3_wlan 的重建版也與原廠不同。**不要**把重建的模組寫進裝置，這個目錄的輸出只用於比對與研究。
+- 還原的 FiiO 修改是依反編譯結果重寫的，沒有在硬體上驗證；camera 的重建版也與原廠不同。**不要**把重建的模組寫進裝置，這個目錄的輸出只用於比對與研究。

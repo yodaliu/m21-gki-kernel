@@ -27,7 +27,7 @@ pinctrl_lpi_dlkm            IDENTICAL
 q6_dlkm                     IDENTICAL  
 q6_notifier_dlkm            IDENTICAL  
 q6_pdr_dlkm                 IDENTICAL  
-qca_cld3_wlan               DIFFERENT  funcs 10410/12389 same-size, exports =, imports -10/+8, strings -1054/+2069
+qca_cld3_wlan               CLOSE      funcs 12336/12389 same-size, exports =, imports -0/+0, strings -0/+0
 qce50_dlkm                  IDENTICAL  
 qcedev_mod_dlkm             IDENTICAL  
 qcrypto_msm_dlkm            IDENTICAL  
@@ -54,4 +54,4 @@ wcd9xxx_dlkm                IDENTICAL
 wcd_core_dlkm               IDENTICAL  
 wlan_firmware_service       IDENTICAL  
 wsa881x_analog_dlkm         IDENTICAL  
-SUMMARY: CLOSE=5, DIFFERENT=2, IDENTICAL=49, MISSING=1 (mmrm_test_module), total=57
+SUMMARY: CLOSE=6, DIFFERENT=1, IDENTICAL=49, MISSING=1 (mmrm_test_module), total=57

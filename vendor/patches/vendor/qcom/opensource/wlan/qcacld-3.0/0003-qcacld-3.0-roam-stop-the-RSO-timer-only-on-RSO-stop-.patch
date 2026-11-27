@@ -1,0 +1,74 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: yodaliu <yodaliu@gmail.com>
+Date: Fri, 27 Nov 2026 18:51:16 +0800
+Subject: [PATCH 3/4] qcacld-3.0: roam: stop the RSO timer only on RSO stop
+ success and log more
+
+- target_if_cm_roam_event(): stop the RSO stop timer on HO_FAILED, and on
+  RSO_STATUS only when notif_params is 0, with an error log.
+- extract_roam_event_tlv(): also log notif_params and notif_params1.
+- cm_roam_switch_to_roam_start(): a roam start in ROAMING_IN_PROG is not an
+  error; log it and return success.
+
+Reconstructed from the stock FiiO M21 FW 1.1.0 qca_cld3_wlan; the rebuilt module
+matches it.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ .../target_if/connection_mgr/src/target_if_cm_roam_event.c | 7 +++++--
+ .../mlme/connection_mgr/core/src/wlan_cm_roam_offload.c    | 4 ++++
+ components/wmi/src/wmi_unified_roam_tlv.c                  | 5 +++--
+ 3 files changed, 12 insertions(+), 4 deletions(-)
+
+diff --git a/components/target_if/connection_mgr/src/target_if_cm_roam_event.c b/components/target_if/connection_mgr/src/target_if_cm_roam_event.c
+index df0e79d589..f0f17cc6d2 100644
+--- a/components/target_if/connection_mgr/src/target_if_cm_roam_event.c
++++ b/components/target_if/connection_mgr/src/target_if_cm_roam_event.c
+@@ -243,9 +243,12 @@ int target_if_cm_roam_event(ol_scn_t scn, uint8_t *event, uint32_t len)
+ 	 * Stop the timer upon RSO stop status success. The timer shall continue
+ 	 * to run upon HO_FAIL status and would be stopped upon HO_FAILED event
+ 	 */
+-	if (roam_event->reason == ROAM_REASON_RSO_STATUS ||
+-	    roam_event->reason == ROAM_REASON_HO_FAILED)
++	if (roam_event->reason == ROAM_REASON_HO_FAILED ||
++	    (roam_event->reason == ROAM_REASON_RSO_STATUS &&
++	     !roam_event->notif_params)) {
++		target_if_err("QCDEBUG Stopping RSO timer");
+ 		target_if_stop_rso_stop_timer(roam_event);
++	}
+ 
+ 	roam_rx_ops = target_if_cm_get_roam_rx_ops(psoc);
+ 	if (!roam_rx_ops || !roam_rx_ops->roam_event_rx) {
+diff --git a/components/umac/mlme/connection_mgr/core/src/wlan_cm_roam_offload.c b/components/umac/mlme/connection_mgr/core/src/wlan_cm_roam_offload.c
+index 110db24fc8..689562cf9a 100644
+--- a/components/umac/mlme/connection_mgr/core/src/wlan_cm_roam_offload.c
++++ b/components/umac/mlme/connection_mgr/core/src/wlan_cm_roam_offload.c
+@@ -3924,6 +3924,10 @@ cm_roam_switch_to_roam_start(struct wlan_objmgr_pdev *pdev,
+ 		mlme_set_roam_state(psoc, vdev_id, WLAN_ROAMING_IN_PROG);
+ 		break;
+ 
++	case WLAN_ROAMING_IN_PROG:
++		mlme_debug("Roam started already on vdev[%d]", vdev_id);
++		break;
++
+ 	case WLAN_ROAM_RSO_STOPPED:
+ 		/*
+ 		 * When supplicant has disabled roaming, roam invoke triggered
+diff --git a/components/wmi/src/wmi_unified_roam_tlv.c b/components/wmi/src/wmi_unified_roam_tlv.c
+index 1238314771..aa41af790e 100644
+--- a/components/wmi/src/wmi_unified_roam_tlv.c
++++ b/components/wmi/src/wmi_unified_roam_tlv.c
+@@ -2671,10 +2671,11 @@ extract_roam_event_tlv(wmi_unified_t wmi_handle, void *evt_buf, uint32_t len,
+ 		roam_event->vdev_id, QDF_TRACE_DEFAULT_PDEV_ID,
+ 		QDF_PROTO_TYPE_EVENT, QDF_ROAM_EVENTID));
+ 
+-	wmi_debug("FW_ROAM_EVT: Reason:%s[%d], Notif %x for vdevid %x, rssi %d",
++	wmi_debug("FW_ROAM_EVT: Reason:%s[%d], Notif %x for vdevid %x, rssi %d, params %d, params1 %d",
+ 		  wmi_get_roam_event_reason_string(roam_event->reason),
+ 		  roam_event->reason,
+-		  roam_event->notif, roam_event->vdev_id, roam_event->rssi);
++		  roam_event->notif, roam_event->vdev_id, roam_event->rssi,
++		  roam_event->notif_params, roam_event->notif_params1);
+ 
+ 	if (param_buf->hw_mode_transition_fixed_param) {
+ 		hw_mode_trans_ind = qdf_mem_malloc(sizeof(*hw_mode_trans_ind));

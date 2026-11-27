@@ -14,8 +14,11 @@ vendor/qcom/opensource/securemsm-kernel|platform/vendor/qcom/opensource/securems
 vendor/qcom/opensource/mmrm-driver|platform/vendor/opensource/mmrm-driver|0bdd7546c54135613e927f547a69f342bb646c11
 vendor/qcom/opensource/wlan/platform|platform/vendor/qcom-opensource/wlan/platform|16df511d10fc435f27531a398e180dcbf5b2628b
 vendor/qcom/opensource/wlan/fw-api|platform/vendor/qcom-opensource/wlan/fw-api|23dfbf5ce6b6c8904b775ea5c9f464a094684b97
-vendor/qcom/opensource/wlan/qca-wifi-host-cmn|platform/vendor/qcom-opensource/wlan/qca-wifi-host-cmn|fc307e86c9ebfeb85a353d7181506655f223ff32
-vendor/qcom/opensource/wlan/qcacld-3.0|platform/vendor/qcom-opensource/wlan/qcacld-3.0|6baa3ad50c0e7aeb7cb7dde441b7ec5083081c41
+# qcacld: stock reports QWLAN_VERSIONSTR 2.0.9.15N = "Release 2.0.9.15N" on branch wlan-cld3.driver.lnx.2.0.9.r1-rel
+#   (2023-01-17); cmn is the last commit before it on wlan-cmn.driver.lnx.2.0.9.r1-rel.  vendor/patches adds
+#   two later upstream fixes stock carries and the FiiO/Quectel changes.
+vendor/qcom/opensource/wlan/qca-wifi-host-cmn|platform/vendor/qcom-opensource/wlan/qca-wifi-host-cmn|509b149e142cc3e6718d20c19ac84330236c6321
+vendor/qcom/opensource/wlan/qcacld-3.0|platform/vendor/qcom-opensource/wlan/qcacld-3.0|cabc600d9116a4c6c771a6052e1ee577475ec103
 vendor/qcom/opensource/bt-kernel|platform/vendor/qcom-opensource/bt-kernel|865cbd58075f8809af6328f4aa5e5b55967c4671
 vendor/qcom/opensource/dataipa|platform/vendor/opensource/dataipa|36ac7909d193349661d77e5a5d6ec8ee0dca9e86
 vendor/qcom/opensource/datarmnet|platform/vendor/qcom/opensource/datarmnet|b8b9ddaab559bd509d1bb708f43b9df10be9e638

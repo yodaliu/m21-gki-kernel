@@ -117,8 +117,11 @@ build_techpacks() {
             CONFIG_WCNSS_MEM_PRE_ALLOC=m CONFIG_CNSS_UTILS=m CONFIG_CNSS_QMI_SVC=m)
   tp wlan-platform "$V/wlan/platform" WLAN_PLATFORM_ROOT="$V/wlan/platform" "${wp[@]}" \
      KBUILD_EXTRA_SYMBOLS="$(sym securemsm-kernel)"
-  # qca_cld3_wlan.ko (Android renames wlan.ko); khaje pairs with WCN3990 = profile "adrastea"
+  # qca_cld3_wlan.ko (Android renames wlan.ko); khaje pairs with WCN3990 = profile "adrastea".
+  # Stock is a user build (no crash inject/pktlog/dup-detect debug) with WLAN_CTRL_NAME set,
+  # which adds the qcwlanstate char device the framework uses for Wi-Fi on/off.
   tp wlan "$V/wlan/qcacld-3.0" WLAN_ROOT="$V/wlan/qcacld-3.0" WLAN_COMMON_ROOT=cmn \
+     TARGET_BUILD_VARIANT=user WLAN_CTRL_NAME=wlan \
      WLAN_COMMON_INC="$V/wlan/qcacld-3.0/cmn" WLAN_FW_API="$V/wlan/fw-api" WLAN_PLATFORM_INC="$V/wlan/platform/inc" \
      WLAN_PROFILE=adrastea MODNAME=wlan DEVNAME=wlan CONFIG_QCA_CLD_WLAN=m BOARD_PLATFORM=bengal "${wp[@]}" \
      KBUILD_EXTRA_SYMBOLS="$(sym wlan/platform)"

@@ -1,0 +1,39 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: yodaliu <yodaliu@gmail.com>
+Date: Fri, 27 Nov 2026 18:51:16 +0800
+Subject: [PATCH 4/4] qcacld-3.0: hdd: read the MAC address from the mac file
+ by default
+
+Default read_mac_addr_from_mac_file to 1, so the driver takes the MAC address
+from the wlan mac file when WCNSS_qcom_cfg.ini does not set it.
+
+Reconstructed from the stock FiiO M21 FW 1.1.0 qca_cld3_wlan; the rebuilt module
+matches it.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+---
+ core/hdd/inc/hdd_config.h | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/core/hdd/inc/hdd_config.h b/core/hdd/inc/hdd_config.h
+index 3f86f54abf..9a6d6eff1b 100644
+--- a/core/hdd/inc/hdd_config.h
++++ b/core/hdd/inc/hdd_config.h
+@@ -817,7 +817,7 @@ struct dhcp_server {
+  * read_mac_addr_from_mac_file - Use/ignore MAC address from mac cfg file
+  * @Min: 0
+  * @Max: 1
+- * @Default: 0
++ * @Default: 1
+  *
+  * This ini is used whether to configure MAC address from the cfg file or not
+  *
+@@ -829,7 +829,7 @@ struct dhcp_server {
+  */
+ #define CFG_READ_MAC_ADDR_FROM_MAC_FILE CFG_INI_BOOL( \
+ 	"read_mac_addr_from_mac_file", \
+-	0, \
++	1, \
+ 	"Use/ignore MAC address from cfg file")
+ 
+ /*
