@@ -1,7 +1,8 @@
 #!/bin/bash
-# Rebuild the stock Qualcomm vendor modules of FiiO M21 FW 1.1.0 from public sources.
+# Rebuild the stock vendor modules of FiiO M21 FW 1.1.0: Qualcomm ones from public sources, FiiO/Quectel ones from vendor/fiio-modules.
 #   1. msm-kernel with gki_defconfig + vendor/bengal_GKI.config + vendor/bengal-m21.config  -> in-tree modules
 #   2. each techpack as an external module against that build                                -> techpack modules
+#   3. the FiiO/Quectel modules reconstructed in vendor/fiio-modules (last step of "techpacks")
 # Sources come from scripts/fetch-vendor-sources.sh.  Output: $VOUT/kernel (in-tree) and $VDIST (all .ko).
 # The rebuilt modules are for reference and comparison (scripts/compare-vendor-modules.py); the M21 kernel
 # itself does not need them.  Usage: build-vendor-modules.sh [kernel|techpacks|all]   (default all)
@@ -130,7 +131,8 @@ build_techpacks() {
   tp audio "$V/audio-kernel" AUDIO_ROOT="$V/audio-kernel" MODNAME=audio
   tp kgsl "$V/graphics-kernel" KGSL_PATH="$V/graphics-kernel" MODNAME=msm_kgsl BOARD_PLATFORM=bengal
   # msm_drm imports fiio_device_register/fiio_device_get_data_by_name from the FiiO private module
-  # fiio_primary_modules (not built here); vendor/symvers/fiio-private.symvers holds its export CRCs
+  # fiio_primary_modules, which is only built in the fiio-modules pass below; vendor/symvers/fiio-private.symvers
+  # holds its export CRCs (the same as the rebuilt module's)
   tp display "$V/display-drivers/msm" DISPLAY_ROOT="$V/display-drivers" MODNAME=msm_drm BOARD_PLATFORM=bengal \
      KBUILD_EXTRA_SYMBOLS="$(sym mmrm-driver) $(sym securemsm-kernel) $HERE/vendor/symvers/fiio-private.symvers"
   tp video "$V/video-driver" VIDEO_ROOT="$V/video-driver" MODNAME=msm_video BOARD_PLATFORM=bengal \
@@ -152,6 +154,10 @@ build_techpacks() {
   else
     echo "warning: no stock gw-fpga.ko under $VWORK/stock, building gw-fpga with a zero FPGA bitstream" >&2
   fi
+  # same for the Hynitron touch firmware: the hyn_chips/*_fw.h headers are generated, not kept in the repo
+  hynko=$(find "$VWORK/stock/" -name hynitron_touch.ko 2>/dev/null | head -1)
+  [ -n "$hynko" ] || echo "warning: no stock hynitron_touch.ko under $VWORK/stock, building it with zero touch firmware" >&2
+  python3 "$HERE/scripts/extract-hynitron-firmware.py" "${hynko:--}" "$VWORK/fiio-modules/input/touchscreen/hynitron_cst/hyn_chips"
   tp fiio "$VWORK/fiio-modules"
 }
 

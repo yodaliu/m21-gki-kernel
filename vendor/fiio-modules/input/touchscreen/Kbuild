@@ -2,3 +2,4 @@ ccflags-y += -I$(src)/../../include
 obj-m += lcd_id.o
 obj-m += ts_core.o
 obj-m += goodix_gt9xx_v281_fiio/
+obj-m += hynitron_cst/

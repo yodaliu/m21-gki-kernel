@@ -1,5 +1,5 @@
-# 308 rebuilt modules (274 Qualcomm + 34 FiiO reconstructed) swapped into the stock vendor_boot/vendor_dlkm/system_dlkm trees (483 files)
-# not replaced: mmrm_test_module + 2 third-party private modules (aw35615_whole, hynitron_touch; stock binaries)
+# 309 rebuilt modules (274 Qualcomm + 35 FiiO reconstructed) swapped into the stock vendor_boot/vendor_dlkm/system_dlkm trees (485 files)
+# not replaced: mmrm_test_module + 1 third-party private module (aw35615_whole; stock binary)
 
 vendor_boot :  259 .ko
 vendor_dlkm :  227 .ko

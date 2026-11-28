@@ -18,15 +18,17 @@ English: [README_EN.md](README_EN.md)
 | `modules/qcom-techpack.list` | 57 個 techpack（外部模組）模組 |
 | `modules/fiio-private.list` | 36 個沒有公開原始碼的 FiiO/Quectel/第三方晶片模組 |
 | `patches/kernel_platform/msm-kernel/` | 樹內模組的 patch：6 個上游 commit ＋ 9 個從原廠模組還原的 FiiO/Quectel 修改 |
-| `patches/vendor/qcom/opensource/<techpack>/` | techpack 的 patch：audio-kernel、graphics-kernel、securemsm-kernel、display-drivers（上游 commit／revert ＋ 還原的 FiiO 修改） |
+| `patches/vendor/qcom/opensource/<techpack>/` | techpack 的 patch：audio-kernel、graphics-kernel、securemsm-kernel、display-drivers、wlan/qcacld-3.0（上游 commit／revert ＋ 還原的 FiiO／Quectel 修改） |
 | `symvers/fiio-private.symvers` | FiiO 私有模組 `fiio_primary_modules` 導出給 msm_drm 的 2 個符號與 CRC（只有 ABI 中繼資料） |
-| `fiio-modules/` | 從原廠 binary 逆向還原的 FiiO 模組原始碼：`primary_modules/`（`fiio_primary_modules`，9 個 .c）、`test/`（4 個除錯／測試模組）、`extcon/`、`codecs/`、`input/`（按鍵、觸控、goodix gt9xx 觸控、aw95016 GPIO 擴充晶片）、`usb/`（fusb302 Type-C PD）、`misc/`、`leds/`、`underlay_modules/`、`fiio_config/`、`fpga/`（FPGA 載入與介面）、`board/`（類比板）、`power/`（電量計、充電 IC、電源板、charger manager）、`quectel/`（Quectel 的 gpio 層、CCI 橋接與測試、模組檢查）、`include/linux/`（Quectel 標頭，檔名與行號依原廠 camera.ko 的 DWARF）、`include/fiio/`（共用標頭，結構依原廠 DWARF），共 34 個模組 |
+| `fiio-modules/` | 從原廠 binary 逆向還原的 FiiO 模組原始碼：`primary_modules/`（`fiio_primary_modules`，9 個 .c）、`test/`（4 個除錯／測試模組）、`extcon/`、`codecs/`、`input/`（按鍵、觸控、goodix gt9xx 與 hynitron 觸控、aw95016 GPIO 擴充晶片）、`usb/`（fusb302 Type-C PD）、`misc/`、`leds/`、`underlay_modules/`、`fiio_config/`、`fpga/`（FPGA 載入與介面）、`board/`（類比板）、`power/`（電量計、充電 IC、電源板、charger manager）、`quectel/`（Quectel 的 gpio 層、CCI 橋接與測試、模組檢查）、`include/linux/`（Quectel 標頭，檔名與行號依原廠 camera.ko 的 DWARF）、`include/fiio/`（共用標頭，結構依原廠 DWARF），共 35 個模組 |
 | `results/qcom-intree.txt`、`results/qcom-techpack.txt` | 比對結果（每個模組一行） |
 | `results/fiio-modules.txt` | FiiO/Quectel 模組比對結果（每個模組一行） |
 | `results/crc-verify.txt` | 換入重建模組後的 CRC 與載入順序驗證結果 |
 | `../scripts/fetch-vendor-sources.sh` | 依 `SOURCES` 抓取原始碼（shallow fetch，約 1.5 GB） |
 | `../scripts/build-vendor-modules.sh` | 建置樹內模組（`kernel`）和 techpack（`techpacks`），預設 `all` |
 | `../scripts/compare-vendor-modules.py` | 比對原廠與重建的模組 |
+| `../scripts/extract-gw-fpga-firmware.py`、`../scripts/extract-hynitron-firmware.py` | 建置時從原廠模組取出 FPGA bitstream 與觸控韌體，產生標頭（不收錄在 repo） |
+| `../scripts/prepare-stock-modules.sh`、`../scripts/verify-all-modules.py` | 從韌體取出原廠三個分區的模組；離線驗證 CRC 與載入順序 |
 
 ## 使用方式
 
@@ -86,8 +88,8 @@ clang 產生的 `.cfi`、`.llvm.N` 等編譯器符號不列入比較。字串裡
 - msm-kernel 的 `scripts/extract-cert.c` 套用 `patches/0001`，讓主機工具能用 OpenSSL 3 建置。
 - `build-vendor-modules.sh` 會把 `vendor/patches/<路徑>/` 的 patch 依序套到該 checkout 的工作目錄；已套用過就跳過。
 - msm_drm 導入 FiiO 私有模組的 `fiio_device_register`、`fiio_device_get_data_by_name`。建置時以 `KBUILD_EXTRA_SYMBOLS` 帶入 `symvers/fiio-private.symvers`，讓 msm_drm 記錄與原廠相同的 CRC。
-- `techpacks` 最後建置 `fiio-modules`（複製到工作目錄外）：34 個模組在同一次 Kbuild 中建置，其他模組直接從 `fiio_primary_modules` 解析導入。
-- 還原模組的導出 CRC 全部與原廠相同（`fiio_primary_modules` 46 個，另有 ts_core、fiio_sw_hold、fiio_underlay_modules、fiio_config 等）。genksyms 的 CRC 會受各 .c 引入哪些標頭影響，所以各檔的 `#include` 是照 CRC 比對結果調整的（例如 `dac_dai.h` 用 `sound/asound.h` 而不是 `sound/pcm.h`）。
+- `techpacks` 最後建置 `fiio-modules`（複製到工作目錄外）：35 個模組在同一次 Kbuild 中建置，其他模組直接從 `fiio_primary_modules` 解析導入。
+- 還原模組的導出 CRC 除了下列例外都與原廠相同（`fiio_primary_modules` 46 個、fiio_config 8 個、fiio_underlay_modules 4 個，以及 fiio_sw_hold、cw221X_fuel_gauge、aw95016、quectel_cci_test 各 1 個）。例外是 gw-fpga 的 `fpga_ctrl_power_by_mode`（9 個中 8 個相同；原廠 fpga_audio_interface 導入它，所以重建的 gw-fpga 不能和原廠 fpga_audio_interface 混用），以及 gpiolib-quectel、quectel_cci_driver（見下方「限制」）。genksyms 的 CRC 會受各 .c 引入哪些標頭影響，所以各檔的 `#include` 是照 CRC 比對結果調整的（例如 `dac_dai.h` 用 `sound/asound.h` 而不是 `sound/pcm.h`）。
 
 ## 結果
 
@@ -96,8 +98,8 @@ clang 產生的 `.cfi`、`.llvm.N` 等編譯器符號不列入比較。字串裡
 | msm-kernel 樹內 | 218 | 216 | 2 | 0 | 0 |
 | techpack | 57 | 49 | 6 | 1 | 1 |
 | 合計 Qualcomm | 275 | 265 (96%) | 8 | 1 | 1 |
-| FiiO/Quectel 逆向還原（`fiio-modules/`） | 34 | 24 | 7 | 3 | 0 |
-| FiiO/Quectel 私有（其餘） | 2 | — | — | — | 無公開原始碼 |
+| FiiO/Quectel 逆向還原（`fiio-modules/`） | 35 | 24 | 7 | 4 | 0 |
+| FiiO/Quectel 私有（其餘） | 1 | — | — | — | 無公開原始碼 |
 
 ### 不一致的原因
 
@@ -144,7 +146,7 @@ clang 產生的 `.cfi`、`.llvm.N` 等編譯器符號不列入比較。字串裡
 
 ### CRC 與載入驗證
 
-把 308 個重建模組（Qualcomm 274 個＋FiiO 還原 34 個）換進原廠三個分區的完整結構（共 483 個檔案；有些模組同時在 vendor_boot 和 vendor_dlkm），再用 `scripts/verify-all-modules.py` 對照 5.15.220-m21 的 `vmlinux.symvers` 離線驗證。結果在 `results/crc-verify.txt`：
+把 309 個重建模組（Qualcomm 274 個＋FiiO 還原 35 個）換進原廠三個分區的完整結構（共 485 個檔案；有些模組同時在 vendor_boot 和 vendor_dlkm），再用 `scripts/verify-all-modules.py` 對照 5.15.220-m21 的 `vmlinux.symvers` 離線驗證。結果在 `results/crc-verify.txt`：
 
 - 原廠模組（基準）：PASS。
 - 換入重建模組後：
@@ -155,7 +157,7 @@ clang 產生的 `.cfi`、`.llvm.N` 等編譯器符號不列入比較。字串裡
 
 ### 限制
 
-- 36 個 FiiO/Quectel 私有模組沒有公開原始碼。其中 34 個已依 Ghidra 反編譯和原廠 DWARF 重寫，24 個建出來與原廠 IDENTICAL、7 個 CLOSE、3 個 DIFFERENT：
+- 36 個 FiiO/Quectel 私有模組沒有公開原始碼。其中 35 個已依 Ghidra 反編譯和原廠 DWARF 重寫，24 個建出來與原廠 IDENTICAL、7 個 CLOSE、4 個 DIFFERENT：
   - 共用模組 `fiio_primary_modules`（裝置／sysfs 屬性註冊、notifier、I2C／regmap 包裝、DAC 與觸控選擇工具）；
   - 4 個除錯／測試模組（ADC、GPIO、UART 除錯與 SPI 測試）；
   - extcon-quec、fiio_snd_soc_dummy_dai、fiio_gpio_key、fiio_sw_hold、fiio_externel_key（外接按鍵配件）、lcd_id、ts_core、fiio_wakeup、led、fiio_underlay_modules、fiio_config（fiioconfig 分區的設定紀錄）。
@@ -163,7 +165,7 @@ clang 產生的 `.cfi`、`.llvm.N` 等編譯器符號不列入比較。字串裡
   - 電源：cw221X_fuel_gauge（電量計，CLOSE 21/22）、fiio-charger-manager（CLOSE 51/53）、sgm41510_charger（充電 IC，DIFFERENT 31/33）、power_board_m21（電源板，DIFFERENT 35/37）。四個模組的導出、導入與字串都和原廠相同，cw221X 導出的 `extern_get_cap` CRC 也相同。
   - 原廠 kernel 的 `enum power_supply_property` 在 68 插入 `POWER_SUPPLY_PROP_CHARGING_ENABLED`，之後的值都比 GKI 大 1。`include/fiio/fiio_power_supply.h` 用原廠的編號。
   - 原廠的 `struct power_supply_config`（0x30）和 `struct power_supply_desc`（0x60）沒有 `ANDROID_KABI_RESERVE`，GKI 版各多 8 位元組。所以 charger manager 結構在 0x478 之後的位移都差 8，`fiio_charger_manager_probe` 也大 12 位元組。這是 kernel 標頭的差異，模組端無法修正。
-  - gw-fpga 內含 FPGA bitstream，本 repo 不收錄：建置時由 `scripts/extract-gw-fpga-firmware.py` 從原廠 `gw-fpga.ko` 取出並產生標頭，所以建置需要原廠模組。
+  - gw-fpga 內含 FPGA bitstream，本 repo 不收錄：建置時由 `scripts/extract-gw-fpga-firmware.py` 從原廠 `gw-fpga.ko` 取出並產生標頭。找不到原廠模組時改用全零的 bitstream 建置（只能用於比對）。
   - Quectel（IDENTICAL）：gpiolib-quectel（GPIO 擴充晶片的統一 gpio 編號與 debugfs `quectel-gpio`）、quectel_cci_driver（camera.ko 註冊 CCI 讀寫函式，供其他驅動使用）、quectel_cci_test（CCI 與 aw95016 gpio 的 debugfs 測試）、q_check_kernel_client（透過 127.0.0.1:9083 對 modem 服務送 AT 指令，檢查 NV 資料或隨機數算出的檢查碼）。這 4 個模組沒有 DWARF，只依反編譯和反組譯重寫；結構和標頭取自原廠 camera.ko 的 DWARF。
   - Quectel 模組的導出 CRC：
     - q_check_kernel_client：原廠的 genksyms 沒有為 `quectel_kernel_model_check` 產生 CRC（`__crc_` 是未定義的 weak 符號），重建版用 `#ifndef __GENKSYMS__` 重現。
@@ -174,6 +176,7 @@ clang 產生的 `.cfi`、`.llvm.N` 等編譯器符號不列入比較。字串裡
   - aw95016（Awinic 16 路 I2C GPIO 擴充晶片，`input/misc/`，CLOSE 46/48）：兩顆晶片（chip_index 2 為 ex2，其餘為 ex3）向 gpiolib-quectel 註冊腳位，並在 debugfs `aw95016_ex2`／`aw95016_ex3` 提供測試檔。結構依原廠 camera.ko 內那份 aw95016.c 的 DWARF。導出的 `extern_gpio_config` CRC 相同。差異只在兩個 debugfs 測試函式的暫存器配置（原廠沒有把兩個分支共同的第一次 I2C 讀取提到分支前）。
   - fusb302（`usb/typec/fusb302/`，CLOSE 29/30）：以 Rockchip kernel 的 `drivers/mfd/fusb302.c`（f6c3b58，2020-12，加入 sink cap 之前的版本）為基礎，原廠 DWARF 的行號與這一版一致。FiiO 的修改：暫存器存取改用 `fiio_regmap_*`、拿掉 VBUS_EN extcon、充電協定 `charger_protocol_qti module`（power role、VBUS 狀態、cc-only 模式切換）、角色切換時保留 VBUS（`preserve_vbus`）、插拔與 OTG 透過 notifier 通知、sysfs `cc_state`。差異只在大幅內聯的 `fusb302_work_func`（所有呼叫都相同，只差暫存器配置）。
   - goodix_gt9xx_ts（`input/touchscreen/goodix_gt9xx_v281_fiio/`，CLOSE 76/78）：以 Goodix 公開的 gt9xx_driver_android V2.8.1 為基礎，gt9xx_update.c 和 goodix_tool.c 與上游逐行相同。FiiO 的修改：ts_core 註冊（`try_to_ping`，探測失敗時延後重試）、6 個按鍵、`inversion-x`、依 version id 選 `goodix,cfg-data-bk%d`／`goodix,cfg-data%d`、hold 開關時丟棄觸控事件、sysfs `gt9xx_gesture_enable`、改由 ts_core 呼叫 suspend／resume（沒有 PM ops）。差異只在 `gtp_get_fw_info` 的暫存器配置（8 bytes）。
-  - 其餘 2 個（aw35615_whole、hynitron_touch）找不到公開原始碼可作基礎（aw35615 是 Awinic 移植的 onsemi FUSB30x PD 協定堆疊，約 410 個函式），只能保留原廠 binary。
+  - hynitron_touch（`input/touchscreen/hynitron_cst/`，DIFFERENT 191/220）：以 Hynitron 公開驅動 V2.21 為基礎，補到原廠的 V2.25 20260320。cst76xx、cst840u、cst923xx 沒有公開原始碼，依反編譯從相近晶片的程式改寫（cst840u、cst76xx 由 cst66xx 改寫，cst923xx 由 cst92xx 改寫並加上 93xx 系列的分頁寫入與晶片表）；cst36xxes、cst8xxT 與核心、sysfs（`hynselftest`）、手勢也依原廠修正。導出、導入與字串都和原廠相同。差異只在暫存器配置、堆疊配置、迴圈展開（cst840u／cst76xx 的 `set_workmode`）和內聯（cst8xxT 的 `set_workmode` 被內聯進 init／resum）。觸控韌體不收錄：建置時由 `scripts/extract-hynitron-firmware.py` 從原廠 `hynitron_touch.ko` 取出，產生 `hyn_chips/*_fw.h`；找不到原廠模組時改用全零的韌體。`MODULE_IMPORT_NS(VFS_internal_...)` 是 5.15.220 的 `kernel_read` 需要的，原廠 5.15.41 沒有。
+  - 其餘 1 個（aw35615_whole）找不到公開原始碼可作基礎（Awinic 移植的 onsemi FUSB30x PD 協定堆疊，約 410 個函式），只能保留原廠 binary。
 - `spi_test_driver` 的原廠模組資訊沿用 AD7280A 驅動的作者與描述，重建版照原樣保留。
 - 還原的 FiiO 修改是依反編譯結果重寫的，沒有在硬體上驗證；camera 的重建版也與原廠不同。**不要**把重建的模組寫進裝置，這個目錄的輸出只用於比對與研究。

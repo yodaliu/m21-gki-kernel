@@ -21,12 +21,11 @@ fiio_underlay_modules       IDENTICAL
 fiio_wakeup                 IDENTICAL  
 fpga_audio_interface        IDENTICAL  
 fpga_interface              IDENTICAL  
-fpga_mgr                    IDENTICAL  
 fusb302                     CLOSE      funcs 29/30 same-size, exports =, imports -0/+0, strings -0/+0
 goodix_gt9xx_ts             CLOSE      funcs 76/78 same-size, exports =, imports -0/+0, strings -0/+0
 gpiolib_quectel             IDENTICAL  
 gw_fpga                     CLOSE      funcs 39/41 same-size, exports =, imports -0/+0, strings -0/+0
-hynitron_touch              MISSING    
+hynitron_touch              DIFFERENT  funcs 191/220 same-size, exports =, imports -0/+0, strings -0/+0
 lcd_id                      IDENTICAL  
 led                         IDENTICAL  
 power_board_m21             DIFFERENT  funcs 35/37 same-size, exports =, imports -0/+0, strings -0/+0
@@ -36,3 +35,4 @@ quectel_cci_test            IDENTICAL
 sgm41510_charger            DIFFERENT  funcs 31/33 same-size, exports =, imports -0/+0, strings -0/+0
 spi_test_driver             IDENTICAL  
 ts_core                     IDENTICAL  
+SUMMARY: CLOSE=7, DIFFERENT=4, IDENTICAL=24, MISSING=1, total=36
