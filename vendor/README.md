@@ -22,6 +22,7 @@ English: [README_EN.md](README_EN.md)
 | `symvers/fiio-private.symvers` | FiiO 私有模組 `fiio_primary_modules` 導出給 msm_drm 的 2 個符號與 CRC（只有 ABI 中繼資料） |
 | `fiio-modules/` | 從原廠 binary 逆向還原的 FiiO 模組原始碼：`primary_modules/`（`fiio_primary_modules`，9 個 .c）、`test/`（4 個除錯／測試模組）、`extcon/`、`codecs/`、`input/`（按鍵、觸控、goodix gt9xx 觸控、aw95016 GPIO 擴充晶片）、`usb/`（fusb302 Type-C PD）、`misc/`、`leds/`、`underlay_modules/`、`fiio_config/`、`fpga/`（FPGA 載入與介面）、`board/`（類比板）、`power/`（電量計、充電 IC、電源板、charger manager）、`quectel/`（Quectel 的 gpio 層、CCI 橋接與測試、模組檢查）、`include/linux/`（Quectel 標頭，檔名與行號依原廠 camera.ko 的 DWARF）、`include/fiio/`（共用標頭，結構依原廠 DWARF），共 34 個模組 |
 | `results/qcom-intree.txt`、`results/qcom-techpack.txt` | 比對結果（每個模組一行） |
+| `results/fiio-modules.txt` | FiiO/Quectel 模組比對結果（每個模組一行） |
 | `results/crc-verify.txt` | 換入重建模組後的 CRC 與載入順序驗證結果 |
 | `../scripts/fetch-vendor-sources.sh` | 依 `SOURCES` 抓取原始碼（shallow fetch，約 1.5 GB） |
 | `../scripts/build-vendor-modules.sh` | 建置樹內模組（`kernel`）和 techpack（`techpacks`），預設 `all` |
