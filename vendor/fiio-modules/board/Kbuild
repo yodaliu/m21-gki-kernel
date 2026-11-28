@@ -1,2 +1,3 @@
 ccflags-y += -I$(src)/../include
 obj-m += anolog_board_m21.o
+obj-m += power_board_m21.o

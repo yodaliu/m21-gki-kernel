@@ -20,7 +20,7 @@ English: [README_EN.md](README_EN.md)
 | `patches/kernel_platform/msm-kernel/` | 樹內模組的 patch：6 個上游 commit ＋ 9 個從原廠模組還原的 FiiO/Quectel 修改 |
 | `patches/vendor/qcom/opensource/<techpack>/` | techpack 的 patch：audio-kernel、graphics-kernel、securemsm-kernel、display-drivers（上游 commit／revert ＋ 還原的 FiiO 修改） |
 | `symvers/fiio-private.symvers` | FiiO 私有模組 `fiio_primary_modules` 導出給 msm_drm 的 2 個符號與 CRC（只有 ABI 中繼資料） |
-| `fiio-modules/` | 從原廠 binary 逆向還原的 FiiO 模組原始碼：`primary_modules/`（`fiio_primary_modules`，9 個 .c）、`test/`（4 個除錯／測試模組）、`extcon/`、`codecs/`、`input/`（按鍵、觸控）、`misc/`、`leds/`、`underlay_modules/`、`fiio_config/`、`fpga/`（FPGA 載入與介面）、`board/`（類比板）、`include/fiio/`（共用標頭，結構依原廠 DWARF），共 23 個模組 |
+| `fiio-modules/` | 從原廠 binary 逆向還原的 FiiO 模組原始碼：`primary_modules/`（`fiio_primary_modules`，9 個 .c）、`test/`（4 個除錯／測試模組）、`extcon/`、`codecs/`、`input/`（按鍵、觸控）、`misc/`、`leds/`、`underlay_modules/`、`fiio_config/`、`fpga/`（FPGA 載入與介面）、`board/`（類比板）、`power/`（電量計、充電 IC、電源板、charger manager）、`include/fiio/`（共用標頭，結構依原廠 DWARF），共 27 個模組 |
 | `results/qcom-intree.txt`、`results/qcom-techpack.txt` | 比對結果（每個模組一行） |
 | `results/crc-verify.txt` | 換入重建模組後的 CRC 與載入順序驗證結果 |
 | `../scripts/fetch-vendor-sources.sh` | 依 `SOURCES` 抓取原始碼（shallow fetch，約 1.5 GB） |
@@ -85,7 +85,7 @@ clang 產生的 `.cfi`、`.llvm.N` 等編譯器符號不列入比較。字串裡
 - msm-kernel 的 `scripts/extract-cert.c` 套用 `patches/0001`，讓主機工具能用 OpenSSL 3 建置。
 - `build-vendor-modules.sh` 會把 `vendor/patches/<路徑>/` 的 patch 依序套到該 checkout 的工作目錄；已套用過就跳過。
 - msm_drm 導入 FiiO 私有模組的 `fiio_device_register`、`fiio_device_get_data_by_name`。建置時以 `KBUILD_EXTRA_SYMBOLS` 帶入 `symvers/fiio-private.symvers`，讓 msm_drm 記錄與原廠相同的 CRC。
-- `techpacks` 最後建置 `fiio-modules`（複製到工作目錄外）：23 個模組在同一次 Kbuild 中建置，其他模組直接從 `fiio_primary_modules` 解析導入。
+- `techpacks` 最後建置 `fiio-modules`（複製到工作目錄外）：27 個模組在同一次 Kbuild 中建置，其他模組直接從 `fiio_primary_modules` 解析導入。
 - 還原模組的導出 CRC 全部與原廠相同（`fiio_primary_modules` 46 個，另有 ts_core、fiio_sw_hold、fiio_underlay_modules、fiio_config 等）。genksyms 的 CRC 會受各 .c 引入哪些標頭影響，所以各檔的 `#include` 是照 CRC 比對結果調整的（例如 `dac_dai.h` 用 `sound/asound.h` 而不是 `sound/pcm.h`）。
 
 ## 結果
@@ -95,8 +95,8 @@ clang 產生的 `.cfi`、`.llvm.N` 等編譯器符號不列入比較。字串裡
 | msm-kernel 樹內 | 218 | 216 | 2 | 0 | 0 |
 | techpack | 57 | 49 | 6 | 1 | 1 |
 | 合計 Qualcomm | 275 | 265 (96%) | 8 | 1 | 1 |
-| FiiO/Quectel 逆向還原（`fiio-modules/`） | 23 | 20 | 3 | 0 | 0 |
-| FiiO/Quectel 私有（其餘） | 13 | — | — | — | 無公開原始碼 |
+| FiiO/Quectel 逆向還原（`fiio-modules/`） | 27 | 20 | 4 | 3 | 0 |
+| FiiO/Quectel 私有（其餘） | 9 | — | — | — | 無公開原始碼 |
 
 ### 不一致的原因
 
@@ -143,7 +143,7 @@ clang 產生的 `.cfi`、`.llvm.N` 等編譯器符號不列入比較。字串裡
 
 ### CRC 與載入驗證
 
-把 297 個重建模組（Qualcomm 274 個＋FiiO 還原 23 個）換進原廠三個分區的完整結構（共 466 個檔案；有些模組同時在 vendor_boot 和 vendor_dlkm），再用 `scripts/verify-all-modules.py` 對照 5.15.220-m21 的 `vmlinux.symvers` 離線驗證。結果在 `results/crc-verify.txt`：
+把 301 個重建模組（Qualcomm 274 個＋FiiO 還原 27 個）換進原廠三個分區的完整結構（共 474 個檔案；有些模組同時在 vendor_boot 和 vendor_dlkm），再用 `scripts/verify-all-modules.py` 對照 5.15.220-m21 的 `vmlinux.symvers` 離線驗證。結果在 `results/crc-verify.txt`：
 
 - 原廠模組（基準）：PASS。
 - 換入重建模組後：
@@ -154,12 +154,15 @@ clang 產生的 `.cfi`、`.llvm.N` 等編譯器符號不列入比較。字串裡
 
 ### 限制
 
-- 36 個 FiiO/Quectel 私有模組沒有公開原始碼。其中 23 個已依 Ghidra 反編譯和原廠 DWARF 重寫，20 個建出來與原廠 IDENTICAL、3 個 CLOSE：
+- 36 個 FiiO/Quectel 私有模組沒有公開原始碼。其中 27 個已依 Ghidra 反編譯和原廠 DWARF 重寫，20 個建出來與原廠 IDENTICAL、4 個 CLOSE、3 個 DIFFERENT：
   - 共用模組 `fiio_primary_modules`（裝置／sysfs 屬性註冊、notifier、I2C／regmap 包裝、DAC 與觸控選擇工具）；
   - 4 個除錯／測試模組（ADC、GPIO、UART 除錯與 SPI 測試）；
   - extcon-quec、fiio_snd_soc_dummy_dai、fiio_gpio_key、fiio_sw_hold、fiio_externel_key（外接按鍵配件）、lcd_id、ts_core、fiio_wakeup、led、fiio_underlay_modules、fiio_config（fiioconfig 分區的設定紀錄）。
-  - 音訊鏈：fpga_interface、fpga_audio_interface、cs43198、fiio_headset_jack（IDENTICAL），gw-fpga（Gowin FPGA 載入器）、dac_core_module、anolog_board_m21（CLOSE，邏輯相同，只差少數函式的分支排列或暫存器配置）。
+  - 音訊鏈：fpga_interface、fpga_audio_interface、cs43198、fiio_headset_jack（IDENTICAL），gw-fpga（Gowin FPGA 載入器）、dac_core_module（CLOSE，邏輯相同，只差少數函式的分支排列或暫存器配置），anolog_board_m21（DIFFERENT，26 個函式中 24 個大小相同）。
+  - 電源：cw221X_fuel_gauge（電量計，CLOSE 21/22）、fiio-charger-manager（CLOSE 51/53）、sgm41510_charger（充電 IC，DIFFERENT 31/33）、power_board_m21（電源板，DIFFERENT 35/37）。四個模組的導出、導入與字串都和原廠相同，cw221X 導出的 `extern_get_cap` CRC 也相同。
+  - 原廠 kernel 的 `enum power_supply_property` 在 68 插入 `POWER_SUPPLY_PROP_CHARGING_ENABLED`，之後的值都比 GKI 大 1。`include/fiio/fiio_power_supply.h` 用原廠的編號。
+  - 原廠的 `struct power_supply_config`（0x30）和 `struct power_supply_desc`（0x60）沒有 `ANDROID_KABI_RESERVE`，GKI 版各多 8 位元組。所以 charger manager 結構在 0x478 之後的位移都差 8，`fiio_charger_manager_probe` 也大 12 位元組。這是 kernel 標頭的差異，模組端無法修正。
   - gw-fpga 內含 FPGA bitstream，本 repo 不收錄：建置時由 `scripts/extract-gw-fpga-firmware.py` 從原廠 `gw-fpga.ko` 取出並產生標頭，所以建置需要原廠模組。
-  - 其餘 13 個（充電、電量計、Type-C、觸控晶片、Quectel 等）只能保留原廠 binary。
+  - 其餘 9 個（Type-C、觸控晶片、Quectel 等）只能保留原廠 binary。
 - `spi_test_driver` 的原廠模組資訊沿用 AD7280A 驅動的作者與描述，重建版照原樣保留。
 - 還原的 FiiO 修改是依反編譯結果重寫的，沒有在硬體上驗證；camera 的重建版也與原廠不同。**不要**把重建的模組寫進裝置，這個目錄的輸出只用於比對與研究。

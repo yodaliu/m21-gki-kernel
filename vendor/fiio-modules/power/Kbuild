@@ -1,0 +1,3 @@
+ccflags-y += -I$(src)/../include
+obj-m += charge_fuel/ charge_buck/
+obj-m += fiio-charger-manager.o
