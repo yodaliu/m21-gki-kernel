@@ -61,17 +61,26 @@ Verdicts:
 - `mmrm_test_module` is not built because its source is not public.
 - qcacld is built with `TARGET_BUILD_VARIANT=user` and `WLAN_CTRL_NAME=wlan`, like stock: the user build drops crash inject, pktlog and TX descriptor dup detection, and `WLAN_CTRL_NAME` adds the `qcwlanstate` char device the framework uses to switch Wi-Fi on and off.
 - msm_drm imports `fiio_device_register` and `fiio_device_get_data_by_name` from the FiiO private module `fiio_primary_modules`. `symvers/fiio-private.symvers` holds their export CRCs (ABI metadata only) and is passed in `KBUILD_EXTRA_SYMBOLS`, so msm_drm records the same CRCs as stock.
-- The `techpacks` step ends by building `fiio-modules`, rewritten from Ghidra decompilation and the stock DWARF: 27 modules in one Kbuild pass (shared headers in `include/fiio/`), so the others resolve their imports from `fiio_primary_modules` directly:
+- The `techpacks` step ends by building `fiio-modules`, rewritten from Ghidra decompilation and the stock DWARF: 32 modules in one Kbuild pass (shared headers in `include/fiio/`), so the others resolve their imports from `fiio_primary_modules` directly:
   - `fiio_primary_modules` (9 .c files);
   - the 4 debug/test modules (`fiio_adc_debug_module`, `fiio_gpio_debug_module`, `fiio_uart_debug_module`, `spi_test_driver`);
   - extcon-quec, fiio_snd_soc_dummy_dai, fiio_gpio_key, fiio_sw_hold, fiio_externel_key, lcd_id, ts_core, fiio_wakeup, led, fiio_underlay_modules and fiio_config.
   - the audio chain: gw-fpga (Gowin FPGA loader), fpga_interface, fpga_audio_interface, dac_core_module, cs43198, anolog_board_m21 and fiio_headset_jack.
   - power: cw221X_fuel_gauge (fuel gauge), sgm41510_charger (charger IC), power_board_m21 and fiio-charger-manager.
+  - Quectel (`quectel/`, headers in `include/linux/` named after the stock camera.ko DWARF): gpiolib-quectel (one gpio number space for GPIO expanders, debugfs `quectel-gpio`), quectel_cci_driver (camera.ko registers its CCI io functions for other drivers), quectel_cci_test (debugfs tests for CCI and the aw95016 gpios) and q_check_kernel_client (sends AT commands to the modem service on 127.0.0.1:9083 and checks the NV data hash or a check code). These four have no DWARF, so they are rewritten from decompilation and disassembly only.
+  - aw95016 (`input/misc/`, Awinic 16-pin I2C GPIO expander): the two chips (chip_index 2 is ex2, the other ex3) register their pins with gpiolib-quectel and get debugfs test files in `aw95016_ex2`/`aw95016_ex3`. The structs follow the DWARF of the aw95016.c copy inside the stock camera.ko.
 - gw-fpga embeds the FPGA bitstream. It is not in this repo: `scripts/extract-gw-fpga-firmware.py` copies it at build time from the stock `gw-fpga.ko` into a generated header, so the build needs the stock module.
 - All export CRCs of the reconstructed modules match stock (46 in `fiio_primary_modules`, plus ts_core, fiio_sw_hold, fiio_underlay_modules, fiio_config and others). genksyms CRCs depend on which headers each .c includes, so the `#include` lists were tuned against the stock CRCs (for example `dac_dai.h` uses `sound/asound.h`, not `sound/pcm.h`).
-- Verdicts of the 27: 20 IDENTICAL; CLOSE: gw-fpga, dac_core_module, cw221X_fuel_gauge (21/22) and fiio-charger-manager (51/53); DIFFERENT: anolog_board_m21 (24/26), sgm41510_charger (31/33) and power_board_m21 (35/37). Exports, imports and strings match stock in all of them.
+- Verdicts of the 32: 24 IDENTICAL (including the 4 Quectel modules); CLOSE: gw-fpga, dac_core_module, cw221X_fuel_gauge (21/22), fiio-charger-manager (51/53) and aw95016 (46/48: two debugfs test functions allocate registers differently, because stock does not hoist the first I2C read shared by both branches); DIFFERENT: anolog_board_m21 (24/26), sgm41510_charger (31/33) and power_board_m21 (35/37). Exports, imports and strings match stock in all of them.
 - The stock kernel inserts `POWER_SUPPLY_PROP_CHARGING_ENABLED` at 68 in `enum power_supply_property`, so every later value is GKI + 1. `include/fiio/fiio_power_supply.h` uses the stock numbering.
 - The stock `struct power_supply_config` (0x30) and `struct power_supply_desc` (0x60) have no `ANDROID_KABI_RESERVE`, while the GKI ones are 8 bytes larger. So charger-manager fields after 0x478 shift by 8 and `fiio_charger_manager_probe` is 12 bytes larger. That comes from the kernel headers and cannot be fixed in the module.
+- Quectel export CRCs:
+  - q_check_kernel_client: the stock genksyms recorded no CRC for `quectel_kernel_model_check` (its `__crc_` is an undefined weak symbol); the rebuild reproduces this with `#ifndef __GENKSYMS__`.
+  - gpiolib-quectel: 9 of 11 match (`unsigned` gpio parameters, `irq_func` is `void (*)(unsigned, void *)`). `quectel_get_named_gpio` and `quectel_gpio_register_dev` differ; both expand `struct device_node`, where the stock kernel probably differs from GKI.
+  - quectel_cci_driver: 2 of 9 match (`quectel_cci_load_result`, and `quectel_cci_register_subdev` with `typedef int (*subdev_probe)(void *)`). The other 7 use camera types that the stock Quectel header seems to define itself, and those definitions cannot be recovered from the binary.
+  - quectel_cci_test: `quectel_cci_test_func` matches.
+  - aw95016: `extern_gpio_config` matches.
+  - Stock camera.ko imports these symbols, so the rebuilt Quectel modules cannot be mixed with the stock camera.ko.
 
 ## Results
 
@@ -80,8 +89,8 @@ Verdicts:
 | msm-kernel in-tree | 218 | 216 | 2 | 0 | 0 |
 | techpacks | 57 | 49 | 6 | 1 | 1 |
 | Qualcomm total | 275 | 265 (96%) | 8 | 1 | 1 |
-| FiiO/Quectel reverse-engineered (`fiio-modules/`) | 27 | 20 | 4 | 3 | 0 |
-| FiiO/Quectel private (rest) | 9 | no public source | | | |
+| FiiO/Quectel reverse-engineered (`fiio-modules/`) | 32 | 24 | 5 | 3 | 0 |
+| FiiO/Quectel private (rest) | 4 | no public source | | | |
 
 **In-tree FiiO/Quectel changes, reconstructed** (patches 0007–0015):
 
@@ -120,11 +129,11 @@ Each remaining CLOSE module was checked by disassembly:
 - bt_fm_slim: stock has one extra empty function, `btfm_slim_get_hwep_details` (just `ret`, not exported), that the public source lacks.
 - msm_drm: `dsi_panel_power_on` differs only in register allocation.
 
-**CRC and load-order check** (`results/crc-verify.txt`): the 301 rebuilt modules (274 Qualcomm + 27 reconstructed FiiO) were swapped into the full stock partition trees (474 files) and checked with `scripts/verify-all-modules.py` against the 5.15.220-m21 `vmlinux.symvers`.
+**CRC and load-order check** (`results/crc-verify.txt`): the 306 rebuilt modules (274 Qualcomm + 32 reconstructed FiiO) were swapped into the full stock partition trees (479 files) and checked with `scripts/verify-all-modules.py` against the 5.15.220-m21 `vmlinux.symvers`.
 
 - Stock passes.
-- With the rebuilt modules there are **0 CRC mismatches** (23,075 kernel and 2,431 inter-module references resolved; no import lacks a version record).
-- There are **0 errors**, load order included. The 4 qca_cld3_wlan load-order errors (`qcom_va_md_*` imports of the newer qcacld) went away with the stock-matching pin.
+- With the rebuilt modules there are **0 CRC mismatches** (23,075 kernel and 2,431 inter-module references resolved; no import lacks a version record). The rebuilt aw95016 records the rebuilt gpiolib-quectel CRCs.
+- Load order has no errors. The 4 qca_cld3_wlan load-order errors (`qcom_va_md_*` imports of the newer qcacld) went away with the stock-matching pin.
 
 This is a static ABI and metadata check. It does not test probing or behaviour on hardware.
 

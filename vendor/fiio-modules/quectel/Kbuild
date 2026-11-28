@@ -1,0 +1,5 @@
+ccflags-y += -I$(src)/../include
+obj-m += q_check_kernel_client.o
+obj-m += quectel_cci_driver.o
+obj-m += gpiolib-quectel.o
+obj-m += quectel_cci_test.o

@@ -1,1 +1,1 @@
-obj-m += keyboard/ touchscreen/
+obj-m += keyboard/ touchscreen/ misc/
