@@ -1,0 +1,38 @@
+# FiiO/Quectel modules: stock vs rebuilt (scripts/compare-vendor-modules.py); reasons in README.md / README_EN.md
+anolog_board_m21            DIFFERENT  funcs 24/26 same-size, exports =, imports -0/+0, strings -0/+0
+aw35615_whole               MISSING    
+aw95016                     CLOSE      funcs 46/48 same-size, exports =, imports -0/+0, strings -0/+0
+cs43198                     IDENTICAL  
+cw221X_fuel_gauge           CLOSE      funcs 21/22 same-size, exports =, imports -0/+0, strings -0/+0
+dac_core_module             CLOSE      funcs 64/67 same-size, exports =, imports -0/+0, strings -0/+0
+extcon_quec                 IDENTICAL  
+fiio_adc_debug_module       IDENTICAL  
+fiio_charger_manager        CLOSE      funcs 51/53 same-size, exports =, imports -0/+0, strings -0/+0
+fiio_config                 IDENTICAL  
+fiio_externel_key           IDENTICAL  
+fiio_gpio_debug_module      IDENTICAL  
+fiio_gpio_key               IDENTICAL  
+fiio_headset_jack           IDENTICAL  
+fiio_primary_modules        IDENTICAL  
+fiio_snd_soc_dummy_dai      IDENTICAL  
+fiio_sw_hold                IDENTICAL  
+fiio_uart_debug_module      IDENTICAL  
+fiio_underlay_modules       IDENTICAL  
+fiio_wakeup                 IDENTICAL  
+fpga_audio_interface        IDENTICAL  
+fpga_interface              IDENTICAL  
+fpga_mgr                    IDENTICAL  
+fusb302                     CLOSE      funcs 29/30 same-size, exports =, imports -0/+0, strings -0/+0
+goodix_gt9xx_ts             CLOSE      funcs 76/78 same-size, exports =, imports -0/+0, strings -0/+0
+gpiolib_quectel             IDENTICAL  
+gw_fpga                     CLOSE      funcs 39/41 same-size, exports =, imports -0/+0, strings -0/+0
+hynitron_touch              MISSING    
+lcd_id                      IDENTICAL  
+led                         IDENTICAL  
+power_board_m21             DIFFERENT  funcs 35/37 same-size, exports =, imports -0/+0, strings -0/+0
+q_check_kernel_client       IDENTICAL  
+quectel_cci_driver          IDENTICAL  
+quectel_cci_test            IDENTICAL  
+sgm41510_charger            DIFFERENT  funcs 31/33 same-size, exports =, imports -0/+0, strings -0/+0
+spi_test_driver             IDENTICAL  
+ts_core                     IDENTICAL  
